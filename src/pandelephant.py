@@ -8,7 +8,7 @@ Base = declarative_base()
 class Execution(Base):
     __tablename__ = 'executions'
     execution_id = Column(Integer, primary_key=True)
-    name = Column(String)
+    name = Column(String, unique=True, nullable=False)
     start_time = Column(DateTime(timezone=True))
     end_time = Column(DateTime(timezone=True)) 
     processes = relationship("Process", back_populates="execution")
@@ -17,10 +17,10 @@ class Execution(Base):
 class Recording(Base):
     __tablename__ = 'recordings'
     recording_id = Column(Integer, primary_key=True)
-    execution_id = Column(Integer, ForeignKey('executions.execution_id'))
+    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
     file_name = Column(String)
-    log_hash = Column(LargeBinary)
-    snapshot_hash = Column(LargeBinary)
+    log_hash = Column(LargeBinary, unique=True, nullable=False)
+    snapshot_hash = Column(LargeBinary, unique=True, nullable=False)
     qcow_hash = Column(LargeBinary)
     execution = relationship("Execution", back_populates="recording", uselist=False)
 
@@ -30,13 +30,12 @@ process_modules = Table('process_modules', Base.metadata, Column('process_id', F
 class Process(Base):
     __tablename__ = 'processes'
     process_id = Column(Integer, primary_key=True)
-    execution_id = Column(Integer, ForeignKey('executions.execution_id'))
+    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
     names = Column(ARRAY(String))
-    asid = Column(BigInteger)
-    pid = Column(BigInteger)
+    pid = Column(BigInteger, nullable=False)
     ppid = Column(BigInteger)
-    tids = Column(Array(BigInteger))
-    create_time = Column(DateTime(timezone=True))
+    tids = Column(ARRAY(BigInteger))
+    create_time = Column(DateTime(timezone=True), nullable=False)
     execution = relationship("Execution", back_populates="processes")
     modules = relationship("Module", secondary=process_modules, back_populates="process")
 
@@ -44,31 +43,31 @@ class Module(Base):
     __tablename__ = 'modules'
     module_id = Column(Integer, primary_key=True)
     name = Column(String)
+    load_time = Column(DateTime(timezone=True), nullable=False)
     path = Column(String)
-    base = Column(BigInteger)
-    size = Column(BigInteger)
+    asid = Column(BigInteger, nullable=False)
+    base = Column(BigInteger, nullable=False) # bases are virtual addresses so we need an ASID
+    size = Column(BigInteger, nullable=False)
     process = relationship("Process", secondary=process_modules, back_populates="modules")
+    codepoints = relationship("CodePoint", back_populates="module")
 
 class CodePoint(Base):
-    __table_name__ = 'codepoints'
+    __tablename__ = 'codepoints'
     code_point_id = Column(Integer, primary_key=True)
-    module = relationship("module", secondary=process_modules, back_populates="modules")
-    offset = Column(BigInteger)
+    module_id = Column(Integer, ForeignKey('modules.module_id'), nullable=False)
+    offset = Column(BigInteger, nullable=False)
+    module = relationship("Module", back_populates="codepoints", uselist=False)
+
 
 class TaintFlow(Base):
     __tablename__ = 'taint_flows'
     taint_flow_id = Column(Integer, primary_key=True)
     # this is the code location of the write (store)
-    src = Column(CodePoint) this is module/offset which i guess means it also relates to a process (which is good)
+    write_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
     # this is the code location of the read (load)
-    dest = Column(CodePoint) this is another module/offset
-    # this is the number of times we observed this flow
-    count = Column(BigInteger)
-    # this is first instr count in the replay when we observed this flow
-    min_instr = Column(BigInteger)
-    # this is last instr count in the replay when we observed this flow
-    max_instr = Column(BigInteger)
-
+    read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
+    write = relationship('CodePoint', foreign_keys=[write_id], uselist=False)
+    read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
 
 def create_session(url, debug=False):
     engine = create_engine(url, echo=debug)
