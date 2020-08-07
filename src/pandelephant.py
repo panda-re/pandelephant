@@ -53,12 +53,21 @@ class CodePoint(Base):
     __table_name__ = 'codepoints'
     code_point_id = Column(Integer, primary_key=True)
     module = relationship("module", secondary=process_modules, back_populates="modules")
+    offset = Column(BigInteger)
 
 class TaintFlow(Base):
     __tablename__ = 'taint_flows'
     taint_flow_id = Column(Integer, primary_key=True)
-    src = this is module/offset which i guess means it also relates to a process (which is good)
-    dest = this is another module/offset
+    # this is the code location of the write (store)
+    src = Column(CodePoint) this is module/offset which i guess means it also relates to a process (which is good)
+    # this is the code location of the read (load)
+    dest = Column(CodePoint) this is another module/offset
+    # this is the number of times we observed this flow
+    count = Column(BigInteger)
+    # this is first instr count in the replay when we observed this flow
+    min_instr = Column(BigInteger)
+    # this is last instr count in the replay when we observed this flow
+    max_instr = Column(BigInteger)
 
 
 def create_session(url, debug=False):
