@@ -35,7 +35,7 @@ class Process(Base):
     asid = Column(BigInteger)
     pid = Column(BigInteger)
     ppid = Column(BigInteger)
-    tid = Column(BigInteger)
+    tids = Column(Array(BigInteger))
     create_time = Column(DateTime(timezone=True))
     execution = relationship("Execution", back_populates="processes")
     modules = relationship("Module", secondary=process_modules, back_populates="process")
@@ -48,6 +48,18 @@ class Module(Base):
     base = Column(BigInteger)
     size = Column(BigInteger)
     process = relationship("Process", secondary=process_modules, back_populates="modules")
+
+class CodePoint(Base):
+    __table_name__ = 'codepoints'
+    code_point_id = Column(Integer, primary_key=True)
+    module = relationship("module", secondary=process_modules, back_populates="modules")
+
+class TaintFlow(Base):
+    __tablename__ = 'taint_flows'
+    taint_flow_id = Column(Integer, primary_key=True)
+    src = this is module/offset which i guess means it also relates to a process (which is good)
+    dest = this is another module/offset
+
 
 def create_session(url, debug=False):
     engine = create_engine(url, echo=debug)
