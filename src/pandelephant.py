@@ -24,9 +24,6 @@ class Recording(Base):
     qcow_hash = Column(LargeBinary)
     execution = relationship("Execution", back_populates="recording", uselist=False)
 
-process_modules = Table('process_modules', Base.metadata, Column('process_id', ForeignKey('processes.process_id'), primary_key=True), Column('module_id', ForeignKey('modules.module_id'), primary_key=True))
-
-
 class Process(Base):
     __tablename__ = 'processes'
     process_id = Column(Integer, primary_key=True)
@@ -37,18 +34,19 @@ class Process(Base):
     tid = Column(BigInteger)
     create_time = Column(DateTime(timezone=True), nullable=False)
     execution = relationship("Execution", back_populates="processes")
-    modules = relationship("Module", secondary=process_modules, back_populates="process")
+    modules = relationship("Module", back_populates="process")
 
 class Module(Base):
     __tablename__ = 'modules'
     module_id = Column(Integer, primary_key=True)
+    process_id = Column(Integer, ForeignKey('processes.process_id'), nullable=False)
     name = Column(String)
     path = Column(String)
-    execution_offset = Column(BigInteger, nullable=False) # This is an offset in instruction count referring to when the load occured. Modules that are loaded at the beginning of the execution should have offset 0.
-    asid = Column(BigInteger, nullable=False)
-    base = Column(BigInteger, nullable=False) # bases are virtual addresses so we need an ASID
+    asid = Column(BigInteger, nullable=False)  # bases are virtual addresses so we need an ASID
+    execution_offset = Column(BigInteger, nullable=False) # We're using an ASID so we need a "time". We're using instruction count indexed by execution start (execution starts at 0).
+    base = Column(BigInteger, nullable=False) 
     size = Column(BigInteger, nullable=False)
-    process = relationship("Process", secondary=process_modules, back_populates="modules")
+    process = relationship("Process", back_populates="modules")
     codepoints = relationship("CodePoint", back_populates="module")
 
 class CodePoint(Base):
