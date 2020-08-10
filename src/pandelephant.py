@@ -43,8 +43,8 @@ class Module(Base):
     __tablename__ = 'modules'
     module_id = Column(Integer, primary_key=True)
     name = Column(String)
-    load_offset = Column(BigInteger, nullable=False) # This is an offset in instruction count referring to when the load occured. Modules that are loaded at the beginning of the execution should have offset 0.
     path = Column(String)
+    execution_offset = Column(BigInteger, nullable=False) # This is an offset in instruction count referring to when the load occured. Modules that are loaded at the beginning of the execution should have offset 0.
     asid = Column(BigInteger, nullable=False)
     base = Column(BigInteger, nullable=False) # bases are virtual addresses so we need an ASID
     size = Column(BigInteger, nullable=False)
@@ -66,6 +66,7 @@ class TaintFlow(Base):
     write_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
     # this is the code location of the read (load)
     read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
+    execution_offset = Column(BigInteger, nullable=False) # This is an offset in the exection by 
     write = relationship('CodePoint', foreign_keys=[write_id], uselist=False)
     read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
 
