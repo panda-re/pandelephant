@@ -26,7 +26,7 @@ class Recording(Base):
 
 process_modules = Table('process_modules', Base.metadata, Column('process_id', ForeignKey('processes.process_id'), primary_key=True), Column('module_id', ForeignKey('modules.module_id'), primary_key=True))
 
-# I'm calling all units of execution processes
+
 class Process(Base):
     __tablename__ = 'processes'
     process_id = Column(Integer, primary_key=True)
@@ -34,7 +34,7 @@ class Process(Base):
     names = Column(ARRAY(String))
     pid = Column(BigInteger, nullable=False)
     ppid = Column(BigInteger)
-    tids = Column(ARRAY(BigInteger))
+    tid = Column(BigInteger)
     create_time = Column(DateTime(timezone=True), nullable=False)
     execution = relationship("Execution", back_populates="processes")
     modules = relationship("Module", secondary=process_modules, back_populates="process")
@@ -43,7 +43,7 @@ class Module(Base):
     __tablename__ = 'modules'
     module_id = Column(Integer, primary_key=True)
     name = Column(String)
-    load_time = Column(DateTime(timezone=True), nullable=False)
+    load_offset = Column(BigInteger, nullable=False) # This is an offset in instruction count referring to when the load occured. Modules that are loaded at the beginning of the execution should have offset 0.
     path = Column(String)
     asid = Column(BigInteger, nullable=False)
     base = Column(BigInteger, nullable=False) # bases are virtual addresses so we need an ASID
