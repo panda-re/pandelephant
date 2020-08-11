@@ -8,10 +8,10 @@ Base = declarative_base()
 class Execution(Base):
     __tablename__ = 'executions'
     execution_id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False)
-    description = Column(String)
-    start_time = Column(DateTime(timezone=True))
-    end_time = Column(DateTime(timezone=True)) 
+    name = Column(String, unique=True, nullable=False) # a short, user supplied name
+    description = Column(String) # a longer, human description of the execution
+    start_time = Column(DateTime(timezone=True)) # guest time
+    end_time = Column(DateTime(timezone=True)) # guest time
     processes = relationship("Process", back_populates="execution")
     recording = relationship("Recording", back_populates="execution", uselist=False)
 
@@ -22,7 +22,7 @@ class Recording(Base):
     file_name = Column(String)
     log_hash = Column(LargeBinary, unique=True, nullable=False)
     snapshot_hash = Column(LargeBinary, unique=True, nullable=False)
-    qcow_hash = Column(LargeBinary)
+    qcow_hash = Column(LargeBinary) # hash of the QCOW used to make the recording taken before the recording
     execution = relationship("Execution", back_populates="recording", uselist=False)
 
 class Process(Base):
@@ -57,10 +57,11 @@ class Module(Base):
     process = relationship("Process", back_populates="modules")
     codepoints = relationship("CodePoint", back_populates="module")
 
+# Any time you want to use a virtual address, it needs to be a reference to this table.
 class VirtualAddress(Base):
     __tablename__ = 'virtual_addresses'
     address_id = Column(Integer, primary_key=True)
-    asid = Column(BigInteger, nullable=False)  # bases are virtual addresses so we need an ASID
+    asid = Column(BigInteger, nullable=False)  # We need an ASID to know address space to query
     execution_offset = Column(BigInteger, nullable=False)  # We're using an ASID so we need a "time". We're using instruction count indexed by execution start (execution starts at 0).
     address = Column(BigInteger, nullable=False)
 
