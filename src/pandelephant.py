@@ -25,6 +25,7 @@ class Recording(Base):
     qcow_hash = Column(LargeBinary) # hash of the QCOW used to make the recording taken before the recording
     execution = relationship("Execution", back_populates="recording", uselist=False)
 
+# Note: every process must have at least one associated thread
 class Process(Base):
     __tablename__ = 'processes'
     process_id = Column(Integer, primary_key=True)
