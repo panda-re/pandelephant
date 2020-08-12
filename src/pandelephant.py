@@ -33,7 +33,7 @@ class Process(Base):
     ppid = Column(BigInteger)
     execution = relationship("Execution", back_populates="processes")
     threads = relationship("Thread", back_populates="process")
-    modules = relationship("Module", back_populates="process")
+    mappings = relationship("Mapping", back_populates="process")
 
 class Thread(Base):
     __tablename__ = 'threads'
@@ -45,17 +45,17 @@ class Thread(Base):
     end_time = Column(DateTime(timezone=True))
     process = relationship("Process", back_populates="threads")
 
-class Module(Base):
-    __tablename__ = 'modules'
-    module_id = Column(Integer, primary_key=True)
+class Mapping(Base):
+    __tablename__ = 'mappings'
+    mapping_id = Column(Integer, primary_key=True)
     process_id = Column(Integer, ForeignKey('processes.process_id'), nullable=False)
     name = Column(String)
     path = Column(String)
     base_id = Column(Integer, ForeignKey('virtual_addresses.address_id'), nullable=False)
     base = relationship("VirtualAddress", uselist=False)
     size = Column(BigInteger, nullable=False)
-    process = relationship("Process", back_populates="modules")
-    codepoints = relationship("CodePoint", back_populates="module")
+    process = relationship("Process", back_populates="mappings")
+    codepoints = relationship("CodePoint", back_populates="mapping")
 
 # Any time you want to use a virtual address, it needs to be a reference to this table.
 class VirtualAddress(Base):
@@ -68,9 +68,9 @@ class VirtualAddress(Base):
 class CodePoint(Base):
     __tablename__ = 'codepoints'
     code_point_id = Column(Integer, primary_key=True)
-    module_id = Column(Integer, ForeignKey('modules.module_id'), nullable=False)
+    mapping_id = Column(Integer, ForeignKey('mappings.mapping_id'), nullable=False)
     offset = Column(BigInteger, nullable=False)
-    module = relationship("Module", back_populates="codepoints", uselist=False)
+    mapping = relationship("Mapping", back_populates="codepoints", uselist=False)
 
 
 class WriteReadFlow(Base):
