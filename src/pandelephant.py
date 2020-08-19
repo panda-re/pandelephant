@@ -102,8 +102,6 @@ def create_session(url, debug=False):
     Session = sessionmaker(bind=engine)
     return Session()
 
-def init_and_create_session(url, debug=False):
+def init(url, debug=False):
     engine = create_engine(url, echo=debug)
     Base.metadata.create_all(engine)
-    Session = sessionmaker(bind=engine)
-    return Session()
