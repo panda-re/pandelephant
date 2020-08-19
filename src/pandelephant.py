@@ -62,9 +62,11 @@ class Mapping(Base):
 class VirtualAddress(Base):
     __tablename__ = 'virtual_addresses'
     address_id = Column(Integer, primary_key=True)
+    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
     asid = Column(BigInteger, nullable=False)  # We need an ASID to know address space to query
     execution_offset = Column(BigInteger, nullable=False)  # We're using an ASID so we need a "time". We're using instruction count indexed by execution start (execution starts at 0).
     address = Column(BigInteger, nullable=False)
+    execution = relationship("Execution", back_populates="virtual_addresses", uselist=False)
 
 class CodePoint(Base):
     __tablename__ = 'codepoints'
@@ -85,11 +87,15 @@ class WriteReadFlow(Base):
     read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
     read_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
 
-    execution_offset = Column(BigInteger, nullable=False) # This is an offset in the exection by 
+    # instr count of write (for replay)
+    write_execution_offset = Column(BigInteger, nullable=False) 
     write = relationship('CodePoint', foreign_keys=[write_id], uselist=False)
     write_thread = relationship('Thread', foreign_keys=[write_thread_id], uselist=False)
+
+    # instr count of read (for replay)
     read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
     read_thread = relationship('Thread', foreign_keys=[read_thread_id], uselist=False)
+    read_execution_offset = Column(BigInteger, nullable=False) # This is an offset in the exection by 
 
 def create_session(url, debug=False):
     engine = create_engine(url, echo=debug)
