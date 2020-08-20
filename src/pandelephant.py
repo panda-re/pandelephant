@@ -66,7 +66,7 @@ class VirtualAddress(Base):
     asid = Column(BigInteger, nullable=False)  # We need an ASID to know address space to query
     execution_offset = Column(BigInteger, nullable=False)  # We're using an ASID so we need a "time". We're using instruction count indexed by execution start (execution starts at 0).
     address = Column(BigInteger, nullable=False)
-    execution = relationship("Execution", back_populates="virtual_addresses", uselist=False)
+    execution = relationship("Execution", uselist=False)
 
 class CodePoint(Base):
     __tablename__ = 'codepoints'
