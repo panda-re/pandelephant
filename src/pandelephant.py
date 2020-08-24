@@ -19,7 +19,7 @@ class Recording(Base):
     __tablename__ = 'recordings'
     recording_id = Column(Integer, primary_key=True)
     execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
-    file_name = Column(String)
+    file_name = Column(String, nullable=False)
     log_hash = Column(LargeBinary, unique=True, nullable=False)
     snapshot_hash = Column(LargeBinary, unique=True, nullable=False)
     qcow_hash = Column(LargeBinary) # hash of the QCOW used to make the recording taken before the recording
