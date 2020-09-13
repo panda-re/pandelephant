@@ -5,6 +5,7 @@ I assume you are on a Linux system
 Here is what you will need to install.
 
 % pip install sqlalchemy
+% pip install sqlalchemy_utils
 % sudo apt install postgresql postgresql-contrib
 
 

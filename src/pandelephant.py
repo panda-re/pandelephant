@@ -79,23 +79,60 @@ class CodePoint(Base):
 class WriteReadFlow(Base):
     __tablename__ = 'writeread_flows'
     writeread_flow_id = Column(Integer, primary_key=True)
-    # this is the code location of the write (store)
+
+    # the code points (module/offset) for write and read
     write_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
-    write_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-
-    # this is the code location of the read (load)
-    read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
-    read_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-
-    # instr count of write (for replay)
-    write_execution_offset = Column(BigInteger, nullable=False) 
     write = relationship('CodePoint', foreign_keys=[write_id], uselist=False)
+    read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
+    read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
+
+    # the thread that did the write
+    write_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
     write_thread = relationship('Thread', foreign_keys=[write_thread_id], uselist=False)
 
-    # instr count of read (for replay)
-    read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
+    # the thread that did the read
+    read_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
     read_thread = relationship('Thread', foreign_keys=[read_thread_id], uselist=False)
+
+    # execution offsets (replay instr count) for write and read
+    write_execution_offset = Column(BigInteger, nullable=False) 
     read_execution_offset = Column(BigInteger, nullable=False) # This is an offset in the exection by 
+
+
+# Used to indicate that a thread was observed to be executing between two points in time
+class ThreadSlice(Base):
+    __tablename__ = "threadslice"
+    threadslice_id = Column(Integer, primary_key=True)
+
+    # this is the thread 
+    slice_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    slice_thread = relationship('Thread', foreign_keys=[slice_thread_id], uselist=False)
+
+    # start and end execution offsets
+    start_execution_offset = Column(BigInteger, nullable=False) 
+    end_execution_offset = Column(BigInteger, nullable=False) 
+
+
+# A system call observed for some thread
+class Syscall(Base):
+    __tablename__ = "syscall"
+    syscall_id = Column(Integer, primary_key=True)
+
+    name = Column(String)
+    arg1 = Column(String)
+    arg2 = Column(String)
+    arg3 = Column(String)
+    arg4 = Column(String)
+    arg5 = Column(String)
+    arg6 = Column(String)    
+
+    # this is the thread that made the call
+    syscall_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    syscall_thread = relationship('Thread', foreign_keys=[syscall_thread_id], uselist=False)
+
+    # and this is when it happened
+    execution_offset = Column(BigInteger, nullable=False) 
+
 
 def create_session(url, debug=False):
     engine = create_engine(url, echo=debug)
