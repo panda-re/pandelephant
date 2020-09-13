@@ -86,8 +86,11 @@ At this point, you should have a postgres db!
 Here's a look at four tables and some inner joins to connect things.
 
 threads:     threads observed during the execution 
+
 processes:   processes observed during ...
+
 threadslice: start/end execution offset indicate time range over which a thread was observed
+
 syscall:     system call (and args) observed at some point in execution
 
 
