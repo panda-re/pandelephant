@@ -83,6 +83,14 @@ Output will look like the following:
 
 At this point, you should have a postgres db!
 
+Here's a look at four tables and some inner joins to connect things.
+
+threads:     threads observed during the execution 
+processes:   processes observed during ...
+threadslice: start/end execution offset indicate time range over which a thread was observed
+syscall:     system call (and args) observed at some point in execution
+
+
     psql -U tleek pandelephant
     
     psql (10.14 (Ubuntu 10.14-0ubuntu0.18.04.1))                                          
