@@ -378,7 +378,7 @@ if __name__ == "__main__":
                     assert (thread in db_sav_threads)
                     db_thread = db_sav_threads[thread]
                     db_thread_slice \
-                        = pe.ThreadSlice(slice_thread=db_thread, \
+                        = pe.ThreadSlice(thread=db_thread, \
                                          start_execution_offset=ai.start_instr, \
                                          end_execution_offset=ai.end_instr)
                     db.add(db_thread_slice)
@@ -407,21 +407,8 @@ if __name__ == "__main__":
                 thread = (sc.tid, sc.create_time)
                 assert (thread in db_sav_threads)
                 db_thread = db_sav_threads[thread]
-                db_syscall = pe.Syscall(name=sc.call_name, syscall_thread=db_thread, execution_offset=msg.instr)
                 sc_args = [sc2s(arg) for arg in sc.args]  
-                l = len(sc_args)
-                if l>=1:
-                    db_syscall.arg1 = sc_args[0]
-                if l>=2:
-                    db_syscall.arg2 = sc_args[1]
-                if l>=3:
-                    db_syscall.arg3 = sc_args[2]
-                if l>=4:
-                    db_syscall.arg4 = sc_args[3]
-                if l>=5:
-                    db_syscall.arg5 = sc_args[4]
-                if l>=6:
-                    db_syscall.arg6 = sc_args[5]
+                db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr, args=sc_args)
                 db.add(db_syscall)
                 
             # tolerate this field being missing

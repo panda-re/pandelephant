@@ -105,8 +105,8 @@ class ThreadSlice(Base):
     threadslice_id = Column(Integer, primary_key=True)
 
     # this is the thread 
-    slice_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-    slice_thread = relationship('Thread', foreign_keys=[slice_thread_id], uselist=False)
+    thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    thread = relationship('Thread', foreign_keys=[thread_id], uselist=False)
 
     # start and end execution offsets
     start_execution_offset = Column(BigInteger, nullable=False) 
@@ -117,18 +117,13 @@ class ThreadSlice(Base):
 class Syscall(Base):
     __tablename__ = "syscall"
     syscall_id = Column(Integer, primary_key=True)
-
+    
     name = Column(String)
-    arg1 = Column(String)
-    arg2 = Column(String)
-    arg3 = Column(String)
-    arg4 = Column(String)
-    arg5 = Column(String)
-    arg6 = Column(String)    
+    args = Column(ARRAY(String))  
 
     # this is the thread that made the call
-    syscall_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-    syscall_thread = relationship('Thread', foreign_keys=[syscall_thread_id], uselist=False)
+    thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    thread = relationship('Thread', foreign_keys=[thread_id], uselist=False)
 
     # and this is when it happened
     execution_offset = Column(BigInteger, nullable=False) 
