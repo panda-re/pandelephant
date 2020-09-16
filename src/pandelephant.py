@@ -1,7 +1,7 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine
+from sqlalchemy import Column, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import relationship, sessionmaker
-
+import enum
 
 Base = declarative_base()
 
@@ -113,21 +113,41 @@ class ThreadSlice(Base):
     end_execution_offset = Column(BigInteger, nullable=False) 
 
 
+
 # A system call observed for some thread
 class Syscall(Base):
-    __tablename__ = "syscall"
+    __tablename__ = "syscalls"
     syscall_id = Column(Integer, primary_key=True)
     
     name = Column(String)
-    args = Column(ARRAY(String))  
+    arguments = relationship("SyscallArgument", back_populates="syscall", order_by="SyscallArgument.position")  
 
     # this is the thread that made the call
     thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
     thread = relationship('Thread', foreign_keys=[thread_id], uselist=False)
 
     # and this is when it happened
-    execution_offset = Column(BigInteger, nullable=False) 
+    execution_offset = Column(BigInteger, nullable=False)
 
+class ArgType(enum.Enum):
+    STRING = 1
+    POINTER = 2
+    UNSIGNED_64 = 3
+    SIGNED_64 = 4
+    UNSIGNED_32 = 5
+    SIGNED_32 = 6
+    UNSIGNED_16 = 7
+    SIGNED_16 = 8
+
+class SyscallArgument(Base):
+    __tablename__ = "syscall_arguments"
+    syscall_argument_id = Column(Integer, primary_key=True)
+    syscall_id = Column(Integer, ForeignKey("syscalls.syscall_id"), nullable=False)
+    syscall = relationship("Syscall", back_populates="arguments", uselist=False)
+    name = Column(String)
+    position = Column(Integer, nullable=False)
+    argument_type = Column(Enum(ArgType))
+    value = Column(String)
 
 def create_session(url, debug=False):
     engine = create_engine(url, echo=debug)

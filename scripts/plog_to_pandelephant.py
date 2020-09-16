@@ -385,30 +385,51 @@ if __name__ == "__main__":
 
             if msg.HasField("syscall"):
 
-                def sc2s(scarg):
+                def syscall_value(a, scarg):
                     if scarg.HasField("str"):
-                        return ("str=%s" % scarg.str)
+                        a.argument_type = pe.ArgType.STRING
+                        a.value = ("%s" % scarg.str)
+                        return
                     if scarg.HasField("ptr"):
-                        return ("ptr=%x" % scarg.ptr)
+                        a.argument_type = pe.ArgType.POINTER
+                        a.value = ("%x" % scarg.ptr)
+                        return
                     if scarg.HasField("u64"):
-                        return ("u64=%d" % scarg.u64)
+                        a.argument_type = pe.ArgType.UNSIGNED_64
+                        a.value = ("%d" % scarg.u64)
+                        return
                     if scarg.HasField("u32"):
-                        return ("u32=%d" % scarg.u32)
+                        a.argument_type = pe.ArgType.UNSIGNED_32
+                        a.value = ("%d" % scarg.u32)
+                        return
                     if scarg.HasField("u16"):
-                        return ("u16=%d" % scarg.u16)
+                        a.argument_type = pe.ArgType.UNSIGNED_16
+                        a.value = ("%d" % scarg.u16)
+                        return
                     if scarg.HasField("i64"):
-                        return ("i64=%d" % scarg.i64)
+                        a.argument_type = pe.ArgType.SIGNED_64
+                        a.value = ("%d" % scarg.i64)
+                        return
                     if scarg.HasField("i32"):
-                        return ("i32=%d" % scarg.i32)
+                        a.argument_type = pe.ArgType.SIGNED_32
+                        a.value = ("%d" % scarg.i32)
+                        return
                     if scarg.HasField("i16"):
-                        return ("i16=%d" % scarg.i16)
+                        a.argument_type = pe.ArgType.SIGNED_16
+                        a.value = ("%d" % scarg.i16)
+                        return
 
                 sc = msg.syscall
                 thread = (sc.tid, sc.create_time)
                 assert (thread in db_sav_threads)
                 db_thread = db_sav_threads[thread]
-                sc_args = [sc2s(arg) for arg in sc.args]  
-                db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr, args=sc_args)
+                
+
+                db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
+                for i in len(sc.args):
+                    a = pe.SyscallArgument(syscall=db_syscall, position=i+1)
+                    syscall_value(a, sc.args[i])
+                    db.add(a)
                 db.add(db_syscall)
                 
             # tolerate this field being missing
