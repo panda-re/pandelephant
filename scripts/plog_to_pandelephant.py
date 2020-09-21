@@ -113,8 +113,11 @@ if __name__ == "__main__":
                 ai = msg.asid_info
                 for tid in ai.tids:                    
                     collect_thread(ai.pid, ai.ppid, tid, ai.create_time)
-            if msg.HasField("syscall"):
-                collect_thread1(msg.syscall)
+            try:
+                if msg.HasField("syscall"):
+                    collect_thread1(msg.syscall)
+            except:
+                pass
 
 
     # re-collect threads by proc
@@ -426,11 +429,14 @@ if __name__ == "__main__":
                 
 
                 db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
-                for i in len(sc.args):
-                    a = pe.SyscallArgument(syscall=db_syscall, position=i+1)
-                    syscall_value(a, sc.args[i])
-                    db.add(a)
                 db.add(db_syscall)
+                i = 1
+                for sc_arg in sc.args:
+                    a = pe.SyscallArgument(syscall=db_syscall, position=i)
+                    syscall_value(a, sc_arg)
+                    db.add(a)
+                    i += 1
+                    
                 
             # tolerate this field being missing
             try:
