@@ -7,6 +7,7 @@ Note that you'll need `sudo` for the pip/python commands if you're installing
 outside of a virtual environment.
 
 Clone repo:
+
     $ git clone git@github.com:panda-re/pandelephant.git
     $ cd pandelephant
 
