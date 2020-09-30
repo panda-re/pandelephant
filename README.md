@@ -4,38 +4,43 @@
 
 I assume you are on a Linux system. Here is what you will need to install and do.
 
-Dependencies 
-
-    sudo pip install sqlalchemy
-    sudo pip install sqlalchemy_utils
-    sudo apt install postgresql postgresql-contrib
-    sudo pip3 install psycopg2
+Dependencies:
+```
+sudo apt-get install postgresql postgresql-contrib libpq-dev
+pip3 install -r requirements.txt
+```
 
 Create a db:
-
-    sudo createdb pandelephant
+```
+sudo createdb pandelephant
+```
 
 You'll also need a user/role that can create databases
  
-    sudo -i -u postgres
-    ostgres@ubuntu:~$ psql
-    psql (10.12 (Ubuntu 10.12-0ubuntu0.18.04.1))
-    Type "help" for help.
+```
+sudo -i -u postgres
+postgres@ubuntu:~$ psql
+psql (10.12 (Ubuntu 10.12-0ubuntu0.18.04.1))
+Type "help" for help.
 
-    postgres=# create user tleek with password 'tleek123';
-    CREATE ROLE
-    postgres=# alter role tleek createdb;
+postgres=# create user tleek with password 'tleek123';
+CREATE ROLE
+postgres=# alter role tleek createdb;
+```
 
 Install pandelephant system wide
 
-    cd pandelephant
-    sudo python ./setup.py  install
+```
+cd pandelephant
+sudo python ./setup.py  install
+```
 
 Make sure that worked
-
-    python
-    >>> import pandelephant.pandelephant as pe
-    >>> db = pe.init_and_create_session("postgres://postgres:postgres123@localhost/pandelephant1", debug=True)
+```
+python
+>>> import pandelephant.pandelephant as pe
+>>> db = pe.init_and_create_session("postgres://postgres:postgres123@localhost/pandelephant1", debug=True)
+```
 
 ## Generate pandalog for ingest
 
