@@ -1,45 +1,39 @@
 # PANDelephant
 
-## Install / setup
+A Python3 + Postgres system for storing data about PANDA executions and recordings.
 
-I assume you are on a Linux system. Here is what you will need to install and do.
+## Linux install / setup
+Note that you'll need `sudo` for the pip/python commands if you're installing
+outside of a virtual environment.
 
-Dependencies:
-```
-sudo apt-get install postgresql postgresql-contrib libpq-dev
-pip3 install -r requirements.txt
-```
+Clone repo:
+    $ git clone git@github.com:panda-re/pandelephant.git
+    $ cd pandelephant
 
-Create a db:
-```
-sudo createdb pandelephant
-```
+Install dependencies:
 
-You'll also need a user/role that can create databases
- 
-```
-sudo -i -u postgres
-postgres@ubuntu:~$ psql
-psql (10.12 (Ubuntu 10.12-0ubuntu0.18.04.1))
-Type "help" for help.
+    $ sudo apt install postgresql postgresql-contrib libpq-dev postgresql-client-common postgresql-client-10
+    $ pip3 install -r requirements.txt
 
-postgres=# create user tleek with password 'tleek123';
-CREATE ROLE
-postgres=# alter role tleek createdb;
-```
+Create a database:
 
-Install pandelephant system wide
+    $ sudo -su postgres createdb pandelephant
 
-```
-cd pandelephant
-sudo python ./setup.py  install
-```
+Create a user account:
 
-Make sure that worked
-```
-python
->>> import pandelephant.pandelephant as pe
->>> db = pe.init_and_create_session("postgres://postgres:postgres123@localhost/pandelephant1", debug=True)
+    $ sudo -su postgres createuser --createdb tleek
+    $ sudo -su postgres psql -c "ALTER USER tleek WITH PASSWORD 'tleek123'"
+
+Install pandelephant:
+
+    $ python3 ./setup.py  install
+
+Make sure that worked by running the following in python3
+```python
+import pandelephant.pandelephant as pe
+db_url = "postgres://tleek:tleek123@localhost/pandelephant") # Customize for your credentials
+pe.init(db_url)
+db = pe.create_session(db_url)
 ```
 
 ## Generate pandalog for ingest
@@ -70,7 +64,8 @@ This will write a pandalog with stuff that can be read into pandelephant.  instr
 
 Make sure you blow away pandelephant db first.
 
-    dropdb pandelephant; createdb pandelephant
+    sudo -su postgres dropdb pandelephant;
+    sudo -su postgres createdb pandelephant
 
 Python ingest into postgres
 
@@ -227,15 +222,3 @@ syscall:     system call (and args) observed at some point in execution
      {systemd-journal} |  350 |           801687 | sys_ftruncate       | u32=22                       | u64=8388608                                                   
      {systemd-journal} |  350 |           804651 | sys_timerfd_settime | i32=16                       | i32=1                                                         
      {dbus-daemon}     |  562 |           818862 | sys_epoll_wait      | i32=4                        | ptr=7fffffffe460                                              
-
-
-
-
-
-
-
-
-
-
-
-
