@@ -6,20 +6,15 @@ import sys
 import pandelephant.pandelephant as pe
 from plog_reader import PLogReader
 
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 import argparse
 import time
 
-
 """
-plog_to_pandelephant.py db_url plog
-
-
-
+USAGE: plog_to_pandelephant.py db_url plog
 """
 
 debug = True
-
 
 class Process:
 
@@ -29,30 +24,21 @@ class Process:
         self.names = names
         self.asids = asids
         self.tids = tids
-        
+
     def __repr__(self):
         return ("Process(names=[%s],pid=%d,asid=0x%x,create_time=%s)" % (self.names, self.pid, self.asid, str(self.create_time)))
 
     def __hash__(self):
         return (hash(self.__repr__()))
-    
+
     def __cmp__(self, other):
         return(cmp(self.__repr__(), other.__repr__()))
 
-
-
-
-    
-
-
-
 if __name__ == "__main__":
-
     start_time = time.time()
-
     parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
     parser.add_argument("-db_url", help="db url", action="store")
-    parser.add_argument("-pandalog", help="pandalog", action="store")    
+    parser.add_argument("-pandalog", help="pandalog", action="store")
     parser.add_argument("-exec_start", "--exec-start", help="Start time for execution", action="store", default=None)
     parser.add_argument("-exec_end", "--exec-end", help="End time for execution", action="store", default=None)
 
@@ -62,22 +48,25 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 #    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
- #   if database_exists(db_url):
+#    if database_exists(db_url):
 #        drop_database(db_url)
 #    create_database(db_url)
-
 #    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
 #    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
-    pe.init(args.db_url)
-    db = pe.create_session(args.db_url)
+
+    plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
+
+def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
+    pe.init(db_url)
+    db = pe.create_session(db_url)
 
     execution_start_datetime = datetime.now()
     try:
-        db_execution = pe.Execution(name=args.exec_name, start_time=execution_start_datetime) # int(args.exec_start), end_time=int(args.exec_end))
+        db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
         db.add(db_execution)
     except Exception as e:
         print(str(e))
-        
+
     procs = {}
 
     pts = set([])
@@ -95,7 +84,7 @@ if __name__ == "__main__":
     def collect_thread1(msg):
         collect_thread(msg.pid, msg.ppid, msg.tid, msg.create_time)
 
-    with PLogReader(args.pandalog) as plr:
+    with PLogReader(pandalog) as plr:
         for i, msg in enumerate(plr):
             if msg.HasField("asid_libraries"):
                 al = msg.asid_libraries
@@ -111,7 +100,7 @@ if __name__ == "__main__":
                 pass
             if msg.HasField("asid_info"):
                 ai = msg.asid_info
-                for tid in ai.tids:                    
+                for tid in ai.tids:
                     collect_thread(ai.pid, ai.ppid, tid, ai.create_time)
             try:
                 if msg.HasField("syscall"):
@@ -150,14 +139,14 @@ if __name__ == "__main__":
     num_no_mappings = 0
     xmllint = set([])
     libxml = set([])
-    with PLogReader(args.pandalog) as plr:
+    with PLogReader(pandalog) as plr:
         for i, msg in enumerate(plr):
             # this msg is the output of loaded_libs plugin
             if msg.HasField("asid_libraries"):
-                al = msg.asid_libraries                
+                al = msg.asid_libraries
                 if (al.succeeded == False) or \
                    (al.pid == 0) or (al.ppid == 0) or (al.tid == 0):
-                    these_mappings = None                        
+                    these_mappings = None
                     num_no_mappings += 1
                     continue
                 thread = (al.tid, al.create_time)
@@ -171,8 +160,8 @@ if __name__ == "__main__":
                     if "libxml" in mapping.name:
                         libxml.add(mp)
                     these_mappings.append(mp)
-                num_mappings += 1                
-                # collect mappings for this process, which 
+                num_mappings += 1
+                # collect mappings for this process, which
                 # are bundled with instr count and asid
                 # which we need to interpret base_addr
                 if not (process in mappings):
@@ -198,15 +187,13 @@ if __name__ == "__main__":
                 process = (ai.pid, ai.ppid)
                 if not (process in tids):
                     tids[process] = set([])
-                for tid in ai.tids:                        
+                for tid in ai.tids:
                     tids[process].add(tid)
                     thread = (tid, ai.create_time)
                     if not (thread in tid_names):
                         tid_names[thread] = set([])
                     for name in ai.names:
                         tid_names[thread].add(name)
-                        
-
 
     print("Num mappings = %d" % num_mappings)
     print("Num no_mappings = %d" % num_no_mappings)
@@ -218,8 +205,7 @@ if __name__ == "__main__":
             (tid,create_time) = thread
             print("** thread %d %d [%s]" % (tid, create_time, str(tid_names[thread])))
 
-        
-    # construct db process, and for each, 
+    # construct db process, and for each,
     # create associated threads and mappings and connect them up
     db_sav_procs = {}
     db_sav_threads = {}
@@ -250,7 +236,7 @@ if __name__ == "__main__":
                 for mapping in one_mappings:
                     (m_name, m_file, m_base, m_size) = mapping
                     db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=m_base, execution=db_execution)
-                    if debug: 
+                    if debug:
                         print("** Creating virtual addr for base for module in that process asid=%x base=%x instr=%d" % \
                                (asid, m_base, instr))
                     db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
@@ -275,12 +261,12 @@ if __name__ == "__main__":
         last_mappings = None
         for mapping_process, mtup_list in mappings.items():
             if mapping_process == process:
-                # the process for this mapping is same as for code point  
+                # the process for this mapping is same as for code point
                 # now find best mapping for instr count of code point
                 for mtup in mtup_list:
                     (mapping_instr, mapping_asid, mapping_list) = mtup
                     if mapping_instr <= cp.instr:
-                        # instr count for this mapping is *prior 
+                        # instr count for this mapping is *prior
                         # to the instr count of the Code point
                         last_mappings = mtup
                     if mapping_instr > cp.instr:
@@ -299,8 +285,6 @@ if __name__ == "__main__":
                                 # found a mapping that contains our pc
                                 return (mapping_instr, mapping, cp.pc - base)
         return None
-        
- 
 
     # find db rows for process and thread indicated, if its there.
     def get_db_process_thread(db_execution, thr):
@@ -310,7 +294,7 @@ if __name__ == "__main__":
         db_thread = db_sav_threads[thread]
         if not (thread in thread2proc):
             return None
-        process = thread2proc[thread]        
+        process = thread2proc[thread]
         if not (process in db_sav_procs):
             return None
         return (db_sav_procs[process], db_thread)
@@ -328,7 +312,7 @@ if __name__ == "__main__":
         db_proc.mappings.append(db_mapping)
         return db_mapping
 
-    # debugging stuff... 
+    # debugging stuff...
     def in_xmllint(pc):
         intervals = [
             (0x555555563000, 2150400),
@@ -339,9 +323,9 @@ if __name__ == "__main__":
             (0x555555762000, 4096)]
         for (base,size) in intervals:
             if (pc >= base and pc <= (base+size)):
-                return True            
+                return True
         return False
-        
+
     def in_libxml(pc):
         intervals = [
             (0x7ffff7dd2000,8192),
@@ -355,10 +339,8 @@ if __name__ == "__main__":
             (0x7ffff7bcb000,2093056)]
         for (base,size) in intervals:
             if (pc >= base and pc <= (base+size)):
-                return True            
+                return True
         return False
-
-
 
     # another pass over the plog to
     # read Flows from tsm and transform them
@@ -366,14 +348,14 @@ if __name__ == "__main__":
     next_instr = 1000000
     num_write_read_flows = 0
     code_points = set([])
-    with PLogReader(args.pandalog) as plr:
+    with PLogReader(pandalog) as plr:
         for i, msg in enumerate(plr):
             if msg.instr > next_instr:
                 print("time=%.2f sec: Hit instr=%d" % (time.time() - start_time, next_instr))
                 if num_write_read_flows > 0:
                     print ("num_write_read_flow=%d " % num_write_read_flows)
                 next_instr += 1000000
-            
+
             if msg.HasField("asid_info"):
                 ai = msg.asid_info
                 for tid in ai.tids:
@@ -426,7 +408,7 @@ if __name__ == "__main__":
                 thread = (sc.tid, sc.create_time)
                 assert (thread in db_sav_threads)
                 db_thread = db_sav_threads[thread]
-                
+
 
                 db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
                 db.add(db_syscall)
@@ -436,8 +418,7 @@ if __name__ == "__main__":
                     syscall_value(a, sc_arg)
                     db.add(a)
                     i += 1
-                    
-                
+
             # tolerate this field being missing
             try:
                 if False and msg.HasField("write_read_flow"):
@@ -479,14 +460,14 @@ if __name__ == "__main__":
                                                           read=db_dest_code_point, \
                                                           read_thread = db_dest_thread, \
                                                           read_execution_offset = wrf.dest.instr)
-                    # execution_offset: 
+                    # execution_offset:
                     # this is instruction count of the read, really
                     # should we have write instr count as well?
                     db.add(db_write_read_flow)
                     num_write_read_flows += 1
             except:
                 pass
-                
+
     print("db commit...")
     db.commit()
     print("final time: %.2f sec" % (time.time() - start_time))
