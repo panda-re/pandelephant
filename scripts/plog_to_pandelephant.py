@@ -34,27 +34,6 @@ class Process:
     def __cmp__(self, other):
         return(cmp(self.__repr__(), other.__repr__()))
 
-if __name__ == "__main__":
-    start_time = time.time()
-    parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
-    parser.add_argument("-db_url", help="db url", action="store")
-    parser.add_argument("-pandalog", help="pandalog", action="store")
-    parser.add_argument("-exec_start", "--exec-start", help="Start time for execution", action="store", default=None)
-    parser.add_argument("-exec_end", "--exec-end", help="End time for execution", action="store", default=None)
-
-    # must have this
-    parser.add_argument("-exec_name", "--exec-name", help="A name for the execution", action="store", required=True)
-
-    args = parser.parse_args()
-
-#    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
-#    if database_exists(db_url):
-#        drop_database(db_url)
-#    create_database(db_url)
-#    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
-#    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
-
-    plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
 
 def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
     pe.init(db_url)
@@ -471,3 +450,26 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
     print("db commit...")
     db.commit()
     print("final time: %.2f sec" % (time.time() - start_time))
+
+
+if __name__ == "__main__":
+    start_time = time.time()
+    parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
+    parser.add_argument("-db_url", help="db url", action="store")
+    parser.add_argument("-pandalog", help="pandalog", action="store")
+    parser.add_argument("-exec_start", "--exec-start", help="Start time for execution", action="store", default=None)
+    parser.add_argument("-exec_end", "--exec-end", help="End time for execution", action="store", default=None)
+
+    # must have this
+    parser.add_argument("-exec_name", "--exec-name", help="A name for the execution", action="store", required=True)
+
+    args = parser.parse_args()
+
+#    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
+#    if database_exists(db_url):
+#        drop_database(db_url)
+#    create_database(db_url)
+#    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
+#    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
+
+    plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
