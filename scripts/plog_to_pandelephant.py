@@ -1,14 +1,19 @@
 #!/usr/bin/python3
-
-import sys
-
-
-import pandelephant.pandelephant as pe
-from plog_reader import PLogReader
-
 from datetime import datetime, timedelta
 import argparse
+import sys
 import time
+
+# Assumes you've installed pandelephant package with seutp.py
+import pandelephant.pandelephant as pe
+
+# PLogReader from pandare package is easiest to import,
+# but if it's unavailable, fallback to searching PYTHONPATH
+# which users should add panda/panda/scripts to
+try:
+    from pandare.plog import PLogReader
+except ImportError:
+    import PLogReader
 
 """
 USAGE: plog_to_pandelephant.py db_url plog
@@ -36,6 +41,7 @@ class Process:
 
 
 def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
+    start_time = time.time()
     pe.init(db_url)
     db = pe.create_session(db_url)
 
@@ -89,9 +95,9 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
 
 
     # re-collect threads by proc
-    thread2proc = {}
-    proc2threads = {}
-    newthreads = set([])
+    thread2proc = {} # Key: thread (tid, create_time). Value: process (pid, ppid)
+    proc2threads = {} # Key: (pid, ppid). Value: set((tid, create_time), ...)
+    newthreads = set([]) # All threads observed
     for thread in threads:
         (pid, ppid, tid, create_time) = thread
         proc = (pid, ppid)
@@ -453,7 +459,6 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
 
 
 if __name__ == "__main__":
-    start_time = time.time()
     parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
     parser.add_argument("-db_url", help="db url", action="store")
     parser.add_argument("-pandalog", help="pandalog", action="store")
