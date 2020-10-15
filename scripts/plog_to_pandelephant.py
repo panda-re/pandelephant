@@ -218,7 +218,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         for thread in proc2threads[process]:
             (tid, thread_create_time) = thread
             tnames = list(tid_names[thread]) if thread in tid_names else []
-            db_thread = pe.Thread(names=list(tid_names[thread]), tid=tid, \
+            db_thread = pe.Thread(names=tnames, tid=tid, \
                                   create_time = thread_create_time)
             db_threads.append(db_thread)
             db_sav_threads[thread] = db_thread
