@@ -4,16 +4,8 @@ import argparse
 import sys
 import time
 
-# Assumes you've installed pandelephant package with seutp.py
+# Assumes you've installed pandelephant package with setup.py
 import pandelephant.pandelephant as pe
-
-# PLogReader from pandare package is easiest to import,
-# but if it's unavailable, fallback to searching PYTHONPATH
-# which users should add panda/panda/scripts to
-try:
-    from pandare.plog import PLogReader
-except ImportError:
-    import PLogReader
 
 """
 USAGE: plog_to_pandelephant.py db_url plog
@@ -40,7 +32,22 @@ class Process:
         return(cmp(self.__repr__(), other.__repr__()))
 
 
-def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None):
+def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLogReader=None):
+
+    if not PLogReader:
+        # This is a terrible hack. If the caller has a plog object, we need to use
+        # it instead of re-importing to avoid a segfault :(
+        # Otherwise we import it either from pandare package or scripts directory
+        # I'm sorry -af.
+
+        # PLogReader from pandare package is easiest to import,
+        # but if it's unavailable, fallback to searching PYTHONPATH
+        # which users should add panda/panda/scripts to
+        try:
+            from pandare.plog import PLogReader
+        except ImportError:
+            import PLogReader
+
     start_time = time.time()
     pe.init(db_url)
     db = pe.create_session(db_url)
