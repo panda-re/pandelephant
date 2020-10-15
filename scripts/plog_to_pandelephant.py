@@ -114,7 +114,9 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         newthreads.add(th)
         proc2threads[proc].add(th)
         if th in thread2proc:
-            assert proc == thread2proc[th]
+            #assert proc == thread2proc[th]
+            if proc != thread2proc[th]:
+                print("WARNING two processes for the same thread:", proc, thread2proc[th])
         thread2proc[th] = proc
     threads = newthreads
 
@@ -195,7 +197,8 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         print("proc %d %d" % process)
         for thread in proc2threads[process]:
             (tid,create_time) = thread
-            print("** thread %d %d [%s]" % (tid, create_time, str(tid_names[thread])))
+            tname = str(tid_names[thread]) if thread in tid_names else ""
+            print("** thread %d %d [%s]" % (tid, create_time, tname))
 
     # construct db process, and for each,
     # create associated threads and mappings and connect them up
@@ -214,13 +217,14 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         db_threads = []
         for thread in proc2threads[process]:
             (tid, thread_create_time) = thread
+            tnames = list(tid_names[thread]) if thread in tid_names else []
             db_thread = pe.Thread(names=list(tid_names[thread]), tid=tid, \
                                   create_time = thread_create_time)
             db_threads.append(db_thread)
             db_sav_threads[thread] = db_thread
             if debug:
                 print("** Creating thread for that process names=[%s] tid=%d create_time=%d" % \
-                       (str(tid_names[thread]), tid, thread_create_time))
+                       (tnames, tid, thread_create_time))
         db_proc.threads = db_threads
         if (process in mappings):
             db_mappings = []
