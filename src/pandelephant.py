@@ -1,9 +1,17 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.pool import StaticPool
 import enum
 
 Base = declarative_base()
+Session = None
+
+def init(url, debug=False):
+    engine = create_engine(url, echo=debug, poolclass=StaticPool)
+    global Session
+    Session = sessionmaker(bind=engine)
+    Base.metadata.create_all(engine)
 
 class Execution(Base):
     __tablename__ = 'executions'
@@ -148,12 +156,3 @@ class SyscallArgument(Base):
     position = Column(Integer, nullable=False)
     argument_type = Column(Enum(ArgType))
     value = Column(String)
-
-def create_session(url, debug=False):
-    engine = create_engine(url, echo=debug)
-    Session = sessionmaker(bind=engine)
-    return Session()
-
-def init(url, debug=False):
-    engine = create_engine(url, echo=debug)
-    Base.metadata.create_all(engine)
