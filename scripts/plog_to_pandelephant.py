@@ -50,12 +50,14 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
 
     start_time = time.time()
     pe.init(db_url)
-    db = pe.create_session(db_url)
+    pe.init(db_url)
+
+    s = pe.Session()
 
     execution_start_datetime = datetime.now()
     try:
         db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
-        db.add(db_execution)
+        s.add(db_execution)
     except Exception as e:
         print(str(e))
 
@@ -243,9 +245,9 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
 
             db_proc.mappings = db_mappings
         db_sav_procs[process] = db_proc
-        db.add(db_proc)
+        s.add(db_proc)
 
-    db.commit()
+    s.commit()
 
     # find mapping that corresponds best to this code point
     # at this instr count
@@ -362,7 +364,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                         = pe.ThreadSlice(thread=db_thread, \
                                          start_execution_offset=ai.start_instr, \
                                          end_execution_offset=ai.end_instr)
-                    db.add(db_thread_slice)
+                    s.add(db_thread_slice)
 
             if msg.HasField("syscall"):
 
@@ -407,12 +409,12 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
 
 
                 db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
-                db.add(db_syscall)
+                s.add(db_syscall)
                 i = 1
                 for sc_arg in sc.args:
                     a = pe.SyscallArgument(syscall=db_syscall, position=i)
                     syscall_value(a, sc_arg)
-                    db.add(a)
+                    s.add(a)
                     i += 1
 
             # tolerate this field being missing
@@ -459,13 +461,13 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                     # execution_offset:
                     # this is instruction count of the read, really
                     # should we have write instr count as well?
-                    db.add(db_write_read_flow)
+                    s.add(db_write_read_flow)
                     num_write_read_flows += 1
             except:
                 pass
 
     print("db commit...")
-    db.commit()
+    s.commit()
     print("final time: %.2f sec" % (time.time() - start_time))
 
 
