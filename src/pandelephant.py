@@ -1,9 +1,33 @@
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import relationship, sessionmaker
+from sqlalchemy.pool import StaticPool
+from psycopg2 import OperationalError
 import enum
+from time import sleep
 
 Base = declarative_base()
+Session = None
+
+def init(url, debug=False, retries=3):
+    engine = create_engine(url, echo=debug, poolclass=StaticPool)
+    global Session
+    Session = sessionmaker(bind=engine)
+    success = False
+    while not success and retries>0:
+        try:
+            Base.metadata.create_all(engine)
+            success = True
+        except OperationalError as e:
+            # DB potentially overloaded "too many connections for role"
+            if retries > 0:
+                print("Warning couldn't connect to DB. Retrying in 60s")
+                sleep(60)
+                retries -= 1
+            else:
+                print("Error couldn't connect to DB!")
+                raise e
+    assert(success), "Couldn't connect to DB"
 
 class Execution(Base):
     __tablename__ = 'executions'
@@ -148,12 +172,3 @@ class SyscallArgument(Base):
     position = Column(Integer, nullable=False)
     argument_type = Column(Enum(ArgType))
     value = Column(String)
-
-def create_session(url, debug=False):
-    engine = create_engine(url, echo=debug)
-    Session = sessionmaker(bind=engine)
-    return Session()
-
-def init(url, debug=False):
-    engine = create_engine(url, echo=debug)
-    Base.metadata.create_all(engine)
