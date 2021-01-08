@@ -5,10 +5,10 @@ import sys
 import time
 
 # Assumes you've installed pandelephant package with setup.py
-import pandelephant.pandelephant as pe
+from .. import db
 
 """
-USAGE: plog_to_pandelephant.py db_url plog
+USAGE: python3 -m pandelephant.parser db_url plog
 """
 
 debug = True
@@ -30,7 +30,6 @@ def hasfield(msg, field_name):
 
 
 class Process:
-
     def __init__(self, pid, create_time, names, asids, tids):
         self.pid = al.pid
         self.create_time = create_time
@@ -48,9 +47,14 @@ class Process:
         return(cmp(self.__repr__(), other.__repr__()))
 
 
-def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLogReader=None):
+def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PLogReader=None):
+    '''
+    Given a pandalog file, parse it and translate it into a PandElephant database
+    '''
 
     if not PLogReader:
+        # update 1/21: I don't know about this shady logic:
+
         # This is a terrible hack. If the caller has a plog object, we need to use
         # it instead of re-importing to avoid a segfault :(
         # Otherwise we import it either from pandare package or scripts directory
@@ -67,16 +71,14 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
             import PLogReader
 
     start_time = time.time()
-    pe.init(db_url)
-#    pe.init(db_url)
-
-    s = pe.Session()
+    pedb = db.Connection(db_url)
+    s = pedb.Session()
 
     execution_start_datetime = datetime.now()
     dbq = s.query(pe.Execution).filter(pe.Execution.name == exec_name)
     if dbq.count() == 0:
         try:
-            db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
+            db_execution = db.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
             s.add(db_execution)
         except Exception as e:
             print(str(e))
@@ -119,7 +121,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     t1 = time.time()
     nal = 0
     nalb = 0
-    with PLogReader(pandalog) as plr:
+    with PLogReader(pandalog) as plr: # Should we specify arch here?
         ii = 0
         for i, msg in enumerate(plr):
             ii += 1
@@ -130,6 +132,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
             if msg.HasField("asid_libraries"):
                 nal += 1
                 al = msg.asid_libraries
+
                 try:
                     collect_thread1(al)
                 except:
@@ -145,7 +148,6 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                 collect_thread1(msg.taint_flow.sink.cp.thread)
             if hasfield(msg, "syscall"):
                 collect_thread1(msg.syscall)
-
 
     print ("nal = %d nalb = %d" % (nal, nalb))
     t2 = time.time()
@@ -301,12 +303,12 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         # why doesn't proc have a create_time?
         # bc all its threads do and the thread with earliest
         # create_time is create time of process, I think.
-        db_proc = pe.Process(pid=pid, ppid=ppid, execution=db_execution)
+        db_proc = db.Process(pid=pid, ppid=ppid, execution=db_execution)
         db_threads = []
         for thread in proc2threads[process]:
             (tid, thread_create_time) = thread
             tnames = list(tid_names[thread]) if thread in tid_names else []
-            db_thread = pe.Thread(names=tnames, tid=tid, \
+            db_thread = db.Thread(names=tnames, tid=tid, \
                                   create_time = thread_create_time)
             db_threads.append(db_thread)
             db_sav_threads[thread] = db_thread
@@ -320,11 +322,11 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
             for (instr,asid,one_mappings) in mappings[process]: # mapping_list:
                 for mapping in one_mappings:
                     (m_name, m_file, m_base, m_size) = mapping
-                    db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=m_base, execution=db_execution)
+                    db_va = db.VirtualAddress(asid=asid, execution_offset=instr, address=m_base, execution=db_execution)
                     if debug:
                         print("** Creating virtual addr for base for module in that process asid=%x base=%x instr=%d" % \
                                (asid, m_base, instr))
-                    db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
+                    db_mapping = db.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
                     if debug:
                         print("** Creating mapping for that process name=%s path=%s base=that virtual addr size=%d" % \
                                (m_name, m_file, m_size))
@@ -380,10 +382,10 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         (name, filename, base, size) = mapping
         # since instr is of a read/write, we need to *create* this va
         # as there's no reason to expect it will already be in the db
-        db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=base, execution=execution)
+        db_va = db.VirtualAddress(asid=asid, execution_offset=instr, address=base, execution=execution)
         # ditto since this mapping uses a virt address indexed to an instr,
         # we dont imagine it will already be there. so create.
-        db_mapping = pe.Mapping(name=name, path=filename, base=db_va, size=size)
+        db_mapping = db.Mapping(name=name, path=filename, base=db_va, size=size)
         # and we need to make sure mapping is assocated with our process, right?
         db_proc.mappings.append(db_mapping)
         return db_mapping
@@ -417,7 +419,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                     assert (thread in db_sav_threads)
                     db_thread = db_sav_threads[thread]
                     db_thread_slice \
-                        = pe.ThreadSlice(thread=db_thread, \
+                        = db.ThreadSlice(thread=db_thread, \
                                          start_execution_offset=ai.start_instr, \
                                          end_execution_offset=ai.end_instr)
                     s.add(db_thread_slice)
@@ -427,35 +429,35 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
 
                 def syscall_value(a, scarg):
                     if scarg.HasField("str"):
-                        a.argument_type = pe.ArgType.STRING
+                        a.argument_type = db.ArgType.STRING
                         a.value = ("%s" % scarg.str)
                         return
                     if scarg.HasField("ptr"):
-                        a.argument_type = pe.ArgType.POINTER
+                        a.argument_type = db.ArgType.POINTER
                         a.value = ("%x" % scarg.ptr)
                         return
                     if scarg.HasField("u64"):
-                        a.argument_type = pe.ArgType.UNSIGNED_64
+                        a.argument_type = db.ArgType.UNSIGNED_64
                         a.value = ("%d" % scarg.u64)
                         return
                     if scarg.HasField("u32"):
-                        a.argument_type = pe.ArgType.UNSIGNED_32
+                        a.argument_type = db.ArgType.UNSIGNED_32
                         a.value = ("%d" % scarg.u32)
                         return
                     if scarg.HasField("u16"):
-                        a.argument_type = pe.ArgType.UNSIGNED_16
+                        a.argument_type = db.ArgType.UNSIGNED_16
                         a.value = ("%d" % scarg.u16)
                         return
                     if scarg.HasField("i64"):
-                        a.argument_type = pe.ArgType.SIGNED_64
+                        a.argument_type = db.ArgType.SIGNED_64
                         a.value = ("%d" % scarg.i64)
                         return
                     if scarg.HasField("i32"):
-                        a.argument_type = pe.ArgType.SIGNED_32
+                        a.argument_type = db.ArgType.SIGNED_32
                         a.value = ("%d" % scarg.i32)
                         return
                     if scarg.HasField("i16"):
-                        a.argument_type = pe.ArgType.SIGNED_16
+                        a.argument_type = db.ArgType.SIGNED_16
                         a.value = ("%d" % scarg.i16)
                         return
 
@@ -465,15 +467,14 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                 db_thread = db_sav_threads[thread]
 
 
-                db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
+                db_syscall = db.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
                 s.add(db_syscall)
                 i = 1
                 for sc_arg in sc.args:
-                    a = pe.SyscallArgument(syscall=db_syscall, position=i)
+                    a = db.SyscallArgument(syscall=db_syscall, position=i)
                     syscall_value(a, sc_arg)
                     s.add(a)
                     i += 1
-
 
             if hasfield(msg, "taint_flow"):
 
@@ -565,8 +566,10 @@ if __name__ == "__main__":
 #    pandalog="/home/tleek/git/panda-leet/tsm/slash-tsm.plog-tcn-100"
 #    pandalog="/home/tleek/toy/_home_tleek_toy_toy_debug.plog"
 
+    #args.db_url = "postgresql://tleek:tleek123@localhost/pandelephant1"
+
     print("%s %s" % (args.db_url, args.exec_name))
-    plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
+    consume_plog(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
 
 #    plog_to_pe(pandalog, db_url, exec_name, None, None)
 

@@ -247,3 +247,11 @@ dmypy.json
 ### Vim ###
 #
 .*.sw*
+
+# Python
+*venv*
+
+# PANDA
+*-rr-snp
+*-nondet.log
+*.plog

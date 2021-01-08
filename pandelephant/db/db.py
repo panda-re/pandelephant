@@ -3,31 +3,45 @@ from sqlalchemy import Column, Boolean, Integer, String, LargeBinary, ARRAY, Big
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
 from psycopg2 import OperationalError
+
 import enum
 from time import sleep
 
-Base = declarative_base()
-Session = None
+# from pandelephant.db import *
 
-def init(url, debug=False, retries=3):
-    engine = create_engine(url, echo=debug, poolclass=StaticPool)
-    global Session
-    Session = sessionmaker(bind=engine)
-    success = False
-    while not success and retries>0:
-        try:
-            Base.metadata.create_all(engine)
-            success = True
-        except OperationalError as e:
-            # DB potentially overloaded "too many connections for role"
-            if retries > 0:
-                print("Warning couldn't connect to DB. Retrying in 60s")
-                sleep(60)
-                retries -= 1
-            else:
-                print("Error couldn't connect to DB!")
-                raise e
-    assert(success), "Couldn't connect to DB"
+Base = declarative_base()
+
+class Connection():
+    def __init__(self, url, debug=False, retries=3):
+        # Helper to get a DB Session and store it in our (global) Session object
+        # example:
+        # from pandelephant import db
+        # db.create_session("foo")
+        # s = db.Session()
+        # s.add(...)
+
+        print(f"Creating connection to {url}")
+        engine = create_engine(url, echo=debug, poolclass=StaticPool)
+        self.Session = sessionmaker(bind=engine)
+
+        # Attempt to connect up to `retries` times
+        success = False
+        while not success and retries>0:
+            try:
+                Base.metadata.create_all(engine)
+                success = True
+            except OperationalError as e:
+                from time import sleep
+                # DB potentially overloaded "too many connections for role"
+                if retries > 0:
+                    print("Warning couldn't connect to DB. Retrying in 60s")
+                    sleep(60)
+                    retries -= 1
+                else:
+                    print("Error couldn't connect to DB!")
+                    raise e
+        if not success:
+            raise RuntimeError("Couldn't connect to DB")
 
 class Execution(Base):
     __tablename__ = 'executions'

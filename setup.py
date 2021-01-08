@@ -1,22 +1,20 @@
-import setuptools
+from setuptools import setup, find_packages
 
-with open("README.md", "r") as readme:
-    long_description = readme.read()
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
-setuptools.setup(
-    name="pandelephant", # Replace with your own username
-    version="0.0.1",
-    author="",
-    author_email="",
-    description="A library for working with the PANDA database",
+setup(name='pandelephant',
+    version='0.0.2',
+    description="A library for translating data from plogs to an ORM and accessing the data in the ORM",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/panda-re/pandelephant",
-    package_dir={'pandelephant': 'src'},
-    packages = ['pandelephant'],
+    author='Andrew Fasano, Andy Davis, and Tim Leek',
+    author_email='fasano@mit.edu',
+    url='https://github.com/panda-re/pandelephant/',
+    packages=find_packages(),
+    install_requires=['sqlalchemy', 'pandare'],
     python_requires='>=3.6',
-    install_requires=['sqlalchemy'],
     extras_require={
         'postgres': ["psycopg2"]
     }
-)
+   )
