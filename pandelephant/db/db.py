@@ -20,7 +20,8 @@ class Connection():
         # s = db.Session()
         # s.add(...)
 
-        print(f"Creating connection to {url}")
+        if debug:
+            print(f"Creating connection to {url}")
         engine = create_engine(url, echo=debug, poolclass=StaticPool)
         self.Session = sessionmaker(bind=engine)
 
@@ -42,6 +43,30 @@ class Connection():
                     raise e
         if not success:
             raise RuntimeError("Couldn't connect to DB")
+
+    def get_executions(self):
+        '''
+        Return a list of executions
+        '''
+        s = self.Session()
+        return s.query(Execution).all()
+
+    def get_proc_threads(self, exe_id):
+        '''
+        Given an execution_id get all processes + threads
+        '''
+        s = self.Session()
+        return s.query(Process).join(Thread).filter(Process.execution_id == exe_id).all()
+
+    def get_syscalls(self, thread_id):
+        '''
+        return all syscalls for a given thread
+        '''
+        s = self.Session()
+        return s.query(Syscall) \
+                    .outerjoin(SyscallArgument) \
+                    .filter(thread_id == thread_id) \
+                    .order_by(Syscall.execution_offset, SyscallArgument.position).all()
 
 class Execution(Base):
     __tablename__ = 'executions'
@@ -71,7 +96,7 @@ class Process(Base):
     pid = Column(BigInteger, nullable=False)
     ppid = Column(BigInteger)
     execution = relationship("Execution", back_populates="processes")
-    threads = relationship("Thread", back_populates="process")
+    threads = relationship("Thread", back_populates="process", lazy='joined')
     mappings = relationship("Mapping", back_populates="process")
 
 class Thread(Base):

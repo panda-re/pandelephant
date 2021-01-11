@@ -49,13 +49,21 @@ class Process:
 
 def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PLogReader=None):
     '''
-    Given a pandalog file, parse it and translate it into a PandElephant database
+    Given a pandalog file, parse it and translate it into a PANDelephant database
+
+    If the calling python process has imported pandare and created a panda object, it is REQUIRED
+    to pass the pandare.plog.PLogReader to this function. Otherwise you'll get a segfault because
+    two versions of the library will be loaded that don't match.  For example:
+        ```
+        from pandare import panda, plog
+        from pandelephant import parser
+        ...
+        parser.consume_plog(..., PLogReader=plog.PLogReader)
+        ```
     '''
 
     if not PLogReader:
-        # update 1/21: I don't know about this shady logic:
-
-        # This is a terrible hack. If the caller has a plog object, we need to use
+        # This is a terrible hack, see above docstring. If the caller has a plog object, we need to use
         # it instead of re-importing to avoid a segfault :(
         # Otherwise we import it either from pandare package or scripts directory
         # I'm sorry -af.
@@ -64,10 +72,8 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
         # but if it's unavailable, fallback to searching PYTHONPATH
         # which users should add panda/panda/scripts to
         try:
-#            from pandare.plog_reader import PLogReader
-            sys.path.append("/home/tleek/git/panda-leet/panda/scripts")
-            from plog_reader import PLogReader
-        except ImportError:
+            from pandare.plog import PLogReader
+        except ImportError: # Fallback, if you don't install pandare, you can add panda's script dir to PYTHONPATH
             import PLogReader
 
     start_time = time.time()
