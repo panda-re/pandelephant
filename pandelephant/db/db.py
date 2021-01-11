@@ -11,7 +11,7 @@ from time import sleep
 
 Base = declarative_base()
 
-class Connection():
+class DataStore():
     def __init__(self, url, debug=False, retries=3):
         # Helper to get a DB Session and store it in our (global) Session object
         # example:

@@ -77,8 +77,8 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
             import PLogReader
 
     start_time = time.time()
-    pedb = db.Connection(db_url)
-    s = pedb.Session()
+    ds = db.DataStore(db_url)
+    s = ds.Session()
 
     execution_start_datetime = datetime.now()
     dbq = s.query(pe.Execution).filter(pe.Execution.name == exec_name)

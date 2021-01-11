@@ -60,7 +60,7 @@ else:
 # Step 4 analyze DB
 print("\n4) Analyzing PANDelephant DB")
 from pandelephant import db
-ds = db.Connection(db_str)
+ds = db.DataStore(db_str)
 
 print("\n4a) All syscalls for a single process")
 # Glue together results from helper function
@@ -81,9 +81,10 @@ for ex in ds.get_executions():
             print(f"{syscall.name} ({args})")
         break
 
-print("\n4a) Filenames opened per process")
+print("\n4a) Syscall count per process")
+# Example of using a custom query
+
 from sqlalchemy import func
-# Custom query
 for ex in ds.get_executions():
     processes = ds.get_proc_threads(ex.execution_id)
     procs = [] # (name, pid, ppid)
