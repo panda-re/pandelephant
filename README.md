@@ -1,6 +1,6 @@
 # PANDelephant
 
-A Python3 + Postgres system for storing data about PANDA executions and recordings.
+A SQLAlchemy-based database for storing everything you want to know about your PANDA executions/recordings. Tested with sqlite and postgres databases.
 
 ## Linux install / setup
 Note that you'll need `sudo` for the pip/python commands if you're installing
@@ -16,75 +16,28 @@ Install dependencies:
     $ sudo apt install postgresql postgresql-contrib libpq-dev postgresql-client-common postgresql-client-10
     $ pip3 install -r requirements.txt
 
-Create a database:
-
-    $ sudo -su postgres createdb pandelephant
-
-Create a user account:
-
-    $ sudo -su postgres createuser --createdb tleek
-    $ sudo -su postgres psql -c "ALTER USER tleek WITH PASSWORD 'tleek123'"
-
 Install pandelephant:
 
-    $ python3 ./setup.py  install
-
-Make sure that worked by running the following in python3
-```python
-import pandelephant.pandelephant as pe
-db_url = "postgres://tleek:tleek123@localhost/pandelephant") # Customize for your credentials
-pe.init(db_url)
-db = pe.create_session(db_url)
-```
+    $ pip install -e .
 
 ## Generate pandalog for ingest
 
-Obtain panda.
+Get PANDA, build it, and install python bindings:
 
     git clone git@github.com:panda-re/panda.git
     cd panda
-
-Check out the pandelephant rose-hulman version of panda.
-
-    git checkout pe-rh 
-
-Compile panda.
-
     mkdir build
+
     cd build
     ../build.sh x86_64-softmmu
     make
 
-Run panda on a replay with all the necessary plugins
+    cd ../panda/python/core
+    pip install -e .
 
-    x86_64-softmmu/panda-system-x86_64 -m 1G -replay slashdot.xml-replay  -os linux-64-ubuntu:4.15.0-72-generic-noaslr-nokaslr -pandalog pe.plog  -panda syscalls_logger -panda asidstory
+Then cd back to your pandelephant directory and run `./generate_and_analyze.py` to generate a plog, convert it into a PANDelephant sqlite database and analyze some data.
 
-This will write a pandalog with stuff that can be read into pandelephant.  instruction count ranges over which threads/processes exit. System calls plus args. 
-
-## Feed pandalog into postgres
-
-Make sure you blow away pandelephant db first.
-
-    sudo -su postgres dropdb pandelephant;
-    sudo -su postgres createdb pandelephant
-
-Python ingest into postgres
-
-    PYTHONPATH=/home/tleek/git/panda/panda/scripts python3 ./scripts/plog_to_pandelephant.py -pandalog ~/git/panda/build/foo.plog -exec_name test -db_url postgres://tleek:tleek123@localhost/pandelephant
-
-Output will look like the following:
-
-    ...
-    time=0.58 sec: Hit instr=44000000
-    time=0.58 sec: Hit instr=45000000
-    time=0.58 sec: Hit instr=46000000
-    time=0.58 sec: Hit instr=47000000
-    db commit...
-    final time: 2.20 sec
-
-At this point, you should have a postgres db!
-
-Here's a look at four tables and some inner joins to connect things.
+Here's a look at four tables and some inner joins to connect things. XXX: This is outdated, it's not quite this simple.
 
 threads:     threads observed during the execution 
 
@@ -95,86 +48,82 @@ threadslice: start/end execution offset indicate time range over which a thread 
 syscall:     system call (and args) observed at some point in execution
 
 
-    psql -U tleek pandelephant
-    
-    psql (10.14 (Ubuntu 10.14-0ubuntu0.18.04.1))                                          
-    Type "help" for help.                                                                 
-                                                                                          
-    pandelephant=> select * from threads                                                  
-    pandelephant-> ;                                                                      
-     thread_id | process_id |       names        | tid  |  create_time  | end_time        
-    -----------+------------+--------------------+------+---------------+----------       
-             1 |          1 | {systemd}          |  864 |  437773461293 |                 
-             2 |          2 | {systemd-logind}   |  557 |   98196905969 |                 
-             3 |          3 | {readlink,sh}      | 1366 | 1282742163157 |                 
-             4 |          4 | {systemd-journal}  |  350 |   43258233692 |                 
-             5 |          5 | {systemd-udevd}    | 1355 | 1282113265248 |                 
-             6 |          6 | {systemd-udevd}    | 1358 | 1282365197925 |                 
-             7 |          7 | {sh,(spawn)}       | 1370 | 1283854115705 |                 
-             8 |          8 | {sh,ln}            | 1371 | 1283871341208 |                 
-             9 |          9 | {systemd-udevd}    | 1360 | 1282385457457 |                 
-            10 |         10 | {bash,xmllint}     | 1373 | 1284753708476 |                 
-            11 |         11 | {sh}               | 1364 | 1282650172422 |                 
-            12 |         12 | {systemd-udevd}    |  368 |   49617139506 |                 
-            13 |         13 | {sleep,bash}       | 1367 | 1283505857743 |                 
-            14 |         14 | {bash}             |  884 |  440329393298 |                 
-            15 |         15 | {cdrom_id,(spawn)} | 1368 | 1283620952196 |                 
-            16 |         16 | {ata_id,(spawn)}   | 1369 | 1283790580956 |                 
-            17 |         17 | {readlink,sh}      | 1372 | 1283883670309 |                 
-            18 |         18 | {systemd}          |    1 |    1072000000 |                 
-            19 |         19 | {dbus-daemon}      |  562 |   98746614715 |                 
-    (19 rows)                                                                             
+    sqlite3 ./test.db
+    sqlite> .headers on
+    sqlite> select * from threads;
+     thread_id | process_id |       names        | tid  |  create_time  | end_time 
+    -----------+------------+--------------------+------+---------------+----------
+             1 |          1 | {systemd}          |  864 |  437773461293 |
+             2 |          2 | {systemd-logind}   |  557 |   98196905969 |
+             3 |          3 | {readlink,sh}      | 1366 | 1282742163157 |
+             4 |          4 | {systemd-journal}  |  350 |   43258233692 |
+             5 |          5 | {systemd-udevd}    | 1355 | 1282113265248 |
+             6 |          6 | {systemd-udevd}    | 1358 | 1282365197925 |
+             7 |          7 | {sh,(spawn)}       | 1370 | 1283854115705 |
+             8 |          8 | {sh,ln}            | 1371 | 1283871341208 |
+             9 |          9 | {systemd-udevd}    | 1360 | 1282385457457 |
+            10 |         10 | {bash,xmllint}     | 1373 | 1284753708476 |
+            11 |         11 | {sh}               | 1364 | 1282650172422 |
+            12 |         12 | {systemd-udevd}    |  368 |   49617139506 |
+            13 |         13 | {sleep,bash}       | 1367 | 1283505857743 |
+            14 |         14 | {bash}             |  884 |  440329393298 |
+            15 |         15 | {cdrom_id,(spawn)} | 1368 | 1283620952196 |
+            16 |         16 | {ata_id,(spawn)}   | 1369 | 1283790580956 |
+            17 |         17 | {readlink,sh}      | 1372 | 1283883670309 |
+            18 |         18 | {systemd}          |    1 |    1072000000 |
+            19 |         19 | {dbus-daemon}      |  562 |   98746614715 |
+    (19 rows)
 
-    pandelephant=> select * from processes;       
-     process_id | execution_id | pid  | ppid      
-    ------------+--------------+------+------     
-              1 |            1 |  864 |    1      
-              2 |            1 |  557 |    1      
-              3 |            1 | 1366 | 1364      
-              4 |            1 |  350 |    1      
-              5 |            1 | 1355 |  368      
-              6 |            1 | 1358 |  368      
-              7 |            1 | 1370 | 1358      
-              8 |            1 | 1371 | 1370      
-              9 |            1 | 1360 |  368      
-             10 |            1 | 1373 |  884      
-             11 |            1 | 1364 | 1355      
-             12 |            1 |  368 |    1      
-             13 |            1 | 1367 |  884      
-             14 |            1 |  884 |  647      
-             15 |            1 | 1368 | 1358      
-             16 |            1 | 1369 | 1358      
-             17 |            1 | 1372 | 1370      
-             18 |            1 |    1 |    0      
-             19 |            1 |  562 |    1      
-    (19 rows)                                     
+    sqlite=> select * from processes;
+     process_id | execution_id | pid  | ppid 
+    ------------+--------------+------+------
+              1 |            1 |  864 |    1 
+              2 |            1 |  557 |    1 
+              3 |            1 | 1366 | 1364 
+              4 |            1 |  350 |    1 
+              5 |            1 | 1355 |  368 
+              6 |            1 | 1358 |  368 
+              7 |            1 | 1370 | 1358 
+              8 |            1 | 1371 | 1370 
+              9 |            1 | 1360 |  368 
+             10 |            1 | 1373 |  884 
+             11 |            1 | 1364 | 1355 
+             12 |            1 |  368 |    1 
+             13 |            1 | 1367 |  884 
+             14 |            1 |  884 |  647 
+             15 |            1 | 1368 | 1358 
+             16 |            1 | 1369 | 1358 
+             17 |            1 | 1372 | 1370 
+             18 |            1 |    1 |    0 
+             19 |            1 |  562 |    1 
+    (19 rows)
 
-    pandelephant=> select * from threadslice limit 20;                                                                                                                        
-     threadslice_id | slice_thread_id | start_execution_offset | end_execution_offset                                                                                         
-    ----------------+-----------------+------------------------+----------------------                                                                                        
-                  1 |              14 |                      0 |                75147                                                                                         
-                  2 |               4 |                  75504 |                94094                                                                                         
-                  3 |               3 |                  94451 |               118029                                                                                         
-                  4 |              19 |                 118386 |               134644                                                                                         
-                  5 |              19 |                 134744 |               134905                                                                                         
-                  6 |               4 |                 135005 |               147655                                                                                         
-                  7 |               4 |                 147755 |               147916                                                                                         
-                  8 |              19 |                 148016 |               173070                                                                                         
-                  9 |              19 |                 173170 |               173331                                                                                         
-                 10 |               3 |                 173431 |               191694                                                                                         
-                 11 |               3 |                 191794 |               191955                                                                                         
-                 12 |               4 |                 192055 |               205208                                                                                         
-                 13 |               4 |                 205308 |               205469                                                                                         
-                 14 |              19 |                 205569 |               300315                                                                                         
-                 15 |              19 |                 300415 |               300575                                                                                         
-                 16 |               2 |                 300675 |               329799                                                                                         
-                 17 |               2 |                 329899 |               330060                                                                                         
-                 18 |               4 |                 330160 |               351132                                                                                         
-                 19 |               4 |                 351232 |               351393                                                                                         
-                 20 |               3 |                 351493 |               395477                                                                                         
-    (20 rows)                                                                                                                                                                 
+    sqlite> select * from threadslice limit 20;
+     threadslice_id | slice_thread_id | start_execution_offset | end_execution_offset 
+    ----------------+-----------------+------------------------+----------------------
+                  1 |              14 |                      0 |                75147 
+                  2 |               4 |                  75504 |                94094 
+                  3 |               3 |                  94451 |               118029 
+                  4 |              19 |                 118386 |               134644 
+                  5 |              19 |                 134744 |               134905 
+                  6 |               4 |                 135005 |               147655 
+                  7 |               4 |                 147755 |               147916 
+                  8 |              19 |                 148016 |               173070 
+                  9 |              19 |                 173170 |               173331 
+                 10 |               3 |                 173431 |               191694 
+                 11 |               3 |                 191794 |               191955 
+                 12 |               4 |                 192055 |               205208 
+                 13 |               4 |                 205308 |               205469 
+                 14 |              19 |                 205569 |               300315 
+                 15 |              19 |                 300415 |               300575 
+                 16 |               2 |                 300675 |               329799 
+                 17 |               2 |                 329899 |               330060 
+                 18 |               4 |                 330160 |               351132 
+                 19 |               4 |                 351232 |               351393 
+                 20 |               3 |                 351493 |               395477 
+    (20 rows)
                                                                                                                                                                               
-    pandelephant=> select * from syscall limit 20;                                                                                                                            
+    sqlite> select * from syscall limit 20;
      syscall_id |        name         |             arg1             |       arg2       |       arg3       |  arg4  | arg5 | arg6 | syscall_thread_id | execution_offset      
     ------------+---------------------+------------------------------+------------------+------------------+--------+------+------+-------------------+------------------     
               1 | sys_clock_gettime   | u32=7                        | ptr=7fffffffe4e0 |                  |        |      |      |                 4 |           136899      
@@ -200,7 +149,7 @@ syscall:     system call (and args) observed at some point in execution
     (20 rows)                                                                                                                                                                 
 
 
-    pandelephant=> select names,tid,execution_offset,name,arg1,arg2 from syscall inner join threads on threads.thread_id = syscall.syscall_thread_id limit 20;        
+    sqlite> select names,tid,execution_offset,name,arg1,arg2 from syscall inner join threads on threads.thread_id = syscall.syscall_thread_id limit 20;        
            names       | tid  | execution_offset |        name         |             arg1             |       arg2                                                    
     -------------------+------+------------------+---------------------+------------------------------+------------------                                             
      {systemd-journal} |  350 |           136899 | sys_clock_gettime   | u32=7                        | ptr=7fffffffe4e0                                              
