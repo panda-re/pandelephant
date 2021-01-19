@@ -1,1 +1,1 @@
-from .parser import *
+from .__main__ import *

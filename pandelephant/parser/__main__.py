@@ -540,6 +540,7 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
 
     print("final time: %.2f sec" % (time.time() - start_time))
 
+<<<<<<< HEAD:pandelephant/parser/parser.py
 
     
     print ("%.2f sec for 3rd pass" % (t2-t1))
@@ -548,7 +549,7 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
 
 
 
-if __name__ == "__main__":
+def main(args):
     parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
     parser.add_argument("-db_url", help="db url", action="store", required=True)
     parser.add_argument("-pandalog", help="pandalog", action="store", required=True)
@@ -577,7 +578,6 @@ if __name__ == "__main__":
     print("%s %s" % (args.db_url, args.exec_name))
     consume_plog(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
 
-#    plog_to_pe(pandalog, db_url, exec_name, None, None)
-
-
-#PYTHONPATH=/home/tleek/git/panda/panda/scripts python3 ./scripts/plog_to_pandelephant.py -pandalog ~/git/panda/build/foo.plog -exec_name test -db_url postgres://tleek:tleek123@localhost/pandelephant
+if __name__ == "__main__":
+    import sys
+    main(sys.argv[1:])
