@@ -2,6 +2,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Boolean, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
+from sqlalchemy import Sequence
+from sqlalchemy.types import TypeDecorator
+
+# XXX: Isn't htis postgres specific - need general error handling
 from psycopg2 import OperationalError
 
 import enum
@@ -99,7 +103,23 @@ class Process(Base):
     threads = relationship("Thread", back_populates="process", lazy='joined')
     mappings = relationship("Mapping", back_populates="process")
 
+
 class Thread(Base):
+    class ListPickleType(TypeDecorator):
+        # Backend-agnostic list storage. Encodes list as strings with __ as delimiter
+        # Note that using ARRAY works but only for postgres. Perhaps it's worth dynamically
+        # changing this type depending on backend? Not sure if that's possible
+        impl = Text(256)
+        def process_bind_param(self, value, dialect):
+            if value is not None:
+                value = "__".join(value)
+            return value
+
+        def process_result_value(self, value, dialect):
+            if value is not None:
+                value = value.split("__")
+            return value
+
     __tablename__ = 'threads'
     thread_id = Column(Integer, primary_key=True)
     process_id = Column(Integer, ForeignKey('processes.process_id'), nullable=False)

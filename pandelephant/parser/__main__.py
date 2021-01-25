@@ -7,10 +7,6 @@ import time
 # Assumes you've installed pandelephant package with setup.py
 from .. import db
 
-"""
-USAGE: python3 -m pandelephant.parser db_url plog
-"""
-
 debug = True
 
 #NN = 2000000
@@ -316,6 +312,7 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
             tnames = list(tid_names[thread]) if thread in tid_names else []
             db_thread = db.Thread(names=tnames, tid=tid, \
                                   create_time = thread_create_time)
+            s.add(db_thread)
             db_threads.append(db_thread)
             db_sav_threads[thread] = db_thread
             if debug:
