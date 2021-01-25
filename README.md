@@ -51,7 +51,7 @@ This script runs a guest under PANDA with the necessary plugins loaded (`asidsto
 ### Analyze Existing Plog
 If you have already collected a plog with the required information, you can convert it into a PANDelephant database with
 ```
-python3 -m pandelephant.parser  -db_url [DB_URL] -pandalog [PANDALOG]
+python3 -m pandelephant.parser  -db_url [DB_URL] -pandalog [PANDALOG] -exec_name [name]
 ```
 
 ### Programatic Ingesting Plogs
