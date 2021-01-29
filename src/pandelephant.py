@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
+from sqlalchemy import Column, Boolean, Integer, String, LargeBinary, ARRAY, BigInteger, DateTime, Table, ForeignKey, create_engine, Enum
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
 from psycopg2 import OperationalError
@@ -42,12 +42,15 @@ class Execution(Base):
 class Recording(Base):
     __tablename__ = 'recordings'
     recording_id = Column(Integer, primary_key=True)
-    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
-    file_name = Column(String, nullable=False)
+    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)    
+    input_file_name = Column(String, nullable=False)
+    # this is the recording prefix 
+    prefix = Column(String, nullable=False)
     log_hash = Column(LargeBinary, unique=True, nullable=False)
     snapshot_hash = Column(LargeBinary, unique=True, nullable=False)
     qcow_hash = Column(LargeBinary) # hash of the QCOW used to make the recording taken before the recording
     execution = relationship("Execution", back_populates="recording", uselist=False)
+
 
 # Note: every process must have at least one associated thread
 class Process(Base):
@@ -92,6 +95,7 @@ class VirtualAddress(Base):
     address = Column(BigInteger, nullable=False)
     execution = relationship("Execution", uselist=False)
 
+# an offset within a code module
 class CodePoint(Base):
     __tablename__ = 'codepoints'
     code_point_id = Column(Integer, primary_key=True)
@@ -100,27 +104,29 @@ class CodePoint(Base):
     mapping = relationship("Mapping", back_populates="codepoints", uselist=False)
 
 
-class WriteReadFlow(Base):
-    __tablename__ = 'writeread_flows'
-    writeread_flow_id = Column(Integer, primary_key=True)
+class TaintFlow(Base):
+    __tablename__ = 'taint_flows'
+    taint_flow_id = Column(Integer, primary_key=True)
 
-    # the code points (module/offset) for write and read
-    write_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
-    write = relationship('CodePoint', foreign_keys=[write_id], uselist=False)
-    read_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
-    read = relationship('CodePoint', foreign_keys=[read_id], uselist=False)
+    source_is_store = Column(Boolean, nullable=False)
 
-    # the thread that did the write
-    write_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-    write_thread = relationship('Thread', foreign_keys=[write_thread_id], uselist=False)
+    # the code points (module/offset) for src and sink of flow
+    source_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
+    source = relationship('CodePoint', foreign_keys=[source_id], uselist=False)
+    sink_id = Column(Integer, ForeignKey('codepoints.code_point_id'), nullable=False)
+    sink = relationship('CodePoint', foreign_keys=[sink_id], uselist=False)
 
-    # the thread that did the read
-    read_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
-    read_thread = relationship('Thread', foreign_keys=[read_thread_id], uselist=False)
+    # the thread that did the source
+    source_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    source_thread = relationship('Thread', foreign_keys=[source_thread_id], uselist=False)
 
-    # execution offsets (replay instr count) for write and read
-    write_execution_offset = Column(BigInteger, nullable=False) 
-    read_execution_offset = Column(BigInteger, nullable=False) # This is an offset in the exection by 
+    # the thread that did the sink
+    sink_thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
+    sink_thread = relationship('Thread', foreign_keys=[sink_thread_id], uselist=False)
+
+    # execution offsets (replay instr count) for source and sink
+    source_execution_offset = Column(BigInteger, nullable=False) 
+    sink_execution_offset = Column(BigInteger, nullable=False) 
 
 
 # Used to indicate that a thread was observed to be executing between two points in time

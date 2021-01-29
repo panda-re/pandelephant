@@ -13,6 +13,22 @@ USAGE: plog_to_pandelephant.py db_url plog
 
 debug = True
 
+#NN = 2000000
+NN = 20000000000
+
+
+# HasField will raise an exception if that isnt a possible field name
+# so this version translates that into a False
+def hasfield(msg, field_name):
+    try:
+        if msg.HasField(field_name):
+            return True
+        else:
+            return False
+    except:
+        return False
+
+
 class Process:
 
     def __init__(self, pid, create_time, names, asids, tids):
@@ -44,13 +60,15 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         # but if it's unavailable, fallback to searching PYTHONPATH
         # which users should add panda/panda/scripts to
         try:
-            from pandare.plog import PLogReader
+#            from pandare.plog_reader import PLogReader
+            sys.path.append("/home/tleek/git/panda-leet/panda/scripts")
+            from plog_reader import PLogReader
         except ImportError:
             import PLogReader
 
     start_time = time.time()
     pe.init(db_url)
-    pe.init(db_url)
+#    pe.init(db_url)
 
     s = pe.Session()
 
@@ -65,9 +83,21 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
 
     pts = set([])
 
-    # determine set of threads
+    # 1st pass over plog to get set of threads and processes.
+    #
+    # Why don't we just gather these on the fly? 
+    # Because there are multiple sources for this information
+    # and they have to be reconciled. 
+    # It's oddly tricky to get a consistent view out of a replay
+    # of the set of threads and processes and their names.
+    # One could check at every basic block (by invoking Osi) 
+    # but that would be very slow.  So we check at a few std
+    # temporal points (syscall, every 100 bb, asid_info logging points)
+    # and reconcile.
+    # Better would be if we had callback on after-scheduler-changes-proc
+    #  s.t. we could obtain proc/thread. 
+
     threads = set([])
-    # and processes
     processes = set([])
     def collect_thread(pid, ppid, tid, create_time):
         thread = (pid, ppid, tid, create_time)
@@ -78,32 +108,43 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     def collect_thread1(msg):
         collect_thread(msg.pid, msg.ppid, msg.tid, msg.create_time)
 
+    print("First pass over plog...")
+    t1 = time.time()
+    nal = 0
+    nalb = 0
     with PLogReader(pandalog) as plr:
+        ii = 0
         for i, msg in enumerate(plr):
+            ii += 1
+            if (ii == NN):
+                print("early exit..")
+                break
+            # asid_libraries and asid_info are required
             if msg.HasField("asid_libraries"):
+                nal += 1
                 al = msg.asid_libraries
-                if al.succeeded == False:
-                    continue
-                collect_thread1(al)
-            # tolerate this field being missing
-            try:
-                if msg.HasField("write_read_flow"):
-                    collect_thread1(msg.write_read_flow.src.thread)
-                    collect_thread1(msg.write_read_flow.dest.thread)
-            except:
-                pass
+                try:
+                    collect_thread1(al)
+                except:
+                    nalb += 1
+                    pass
             if msg.HasField("asid_info"):
                 ai = msg.asid_info
                 for tid in ai.tids:
                     collect_thread(ai.pid, ai.ppid, tid, ai.create_time)
-            try:
-                if msg.HasField("syscall"):
-                    collect_thread1(msg.syscall)
-            except:
-                pass
+            # these two fields are not required
+            if hasfield(msg, "taint_flow"):
+                collect_thread1(msg.taint_flow.source.cp.thread)
+                collect_thread1(msg.taint_flow.sink.cp.thread)
+            if hasfield(msg, "syscall"):
+                collect_thread1(msg.syscall)
 
 
-    # re-collect threads by proc
+    print ("nal = %d nalb = %d" % (nal, nalb))
+    t2 = time.time()
+    print ("%.2f sec for 1st pass" % (t2-t1))
+
+    # associate threads and procs
     thread2proc = {} # Key: thread (tid, create_time). Value: process (pid, ppid)
     proc2threads = {} # Key: (pid, ppid). Value: set((tid, create_time), ...)
     newthreads = set([]) # All threads observed
@@ -122,9 +163,19 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         thread2proc[th] = proc
     threads = newthreads
 
+    for th in thread2proc.keys():
+        print ("thread: (tid=%d, create_time=%d)" % th)
+        print (" -- proc (pid=%d, ppid=%d)" % thread2proc[th])
 
-    # again through the pandalog, this time to get
-    # mappings for processes as well as tids for a process
+    for proc in proc2threads.keys():
+        print ("proc (pid=%d, ppid=%d)" % proc)
+        for th in proc2threads[proc]:
+            print (" -- thread: (tid=%d, create_time=%d)" % th)
+
+
+    # 2nd pass over plog 
+    # 
+    # This time to get mappings for processes 
     # and names for each tid
     mappings = {}
     tid_names = {}
@@ -135,13 +186,17 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     num_no_mappings = 0
     xmllint = set([])
     libxml = set([])
+    print("2nd pass over plog...")
+    t1 = time.time()
     with PLogReader(pandalog) as plr:
+        ii = 0 
         for i, msg in enumerate(plr):
+            ii += 1
+            if (ii == NN): break
             # this msg is the output of loaded_libs plugin
-            if msg.HasField("asid_libraries"):
+            if msg.HasField("asid_libraries") and (len(msg.asid_libraries.ListFields()) > 0):
                 al = msg.asid_libraries
-                if (al.succeeded == False) or \
-                   (al.pid == 0) or (al.ppid == 0) or (al.tid == 0):
+                if (al.pid == 0) or (al.ppid == 0) or (al.tid == 0):
                     these_mappings = None
                     num_no_mappings += 1
                     continue
@@ -191,24 +246,43 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                     for name in ai.names:
                         tid_names[thread].add(name)
 
+#   import pdb; pdb.set_trace()
+
+    t2 = time.time()
+    print ("%.2f sec for 2nd pass" % (t2-t1))
+
+    # NB: mappings is keyed on process. For each process, it provides a list of 
+    # the mappings observed at some instr count we can use this later when we 
+    # need a mapping for that process to find the one that makes sense
+    # temporally (since its instr count is just before that of the thing we 
+    # want to resolve).
+
     print("Num mappings = %d" % num_mappings)
     print("Num no_mappings = %d" % num_no_mappings)
     print("Kept %d of %d mappings)" % (num_keep, (num_keep+num_discard)))
     print("%d processes" % (len(processes)))
     for process in processes:
-        print("proc %d %d" % process)
+        print("proc %d %d" % process)        
         for thread in proc2threads[process]:
             (tid,create_time) = thread
             tname = str(tid_names[thread]) if thread in tid_names else ""
-            print("** thread %d %d [%s]" % (tid, create_time, tname))
+            print("  -- thread %d %d [%s]" % (tid, create_time, tname))
+        if process in mappings:
+            print("  -- %d mappings" % (len(mappings[process])))
+            for (instr,b,m) in mappings[process]:
+                print("    @ instr %d, %d mappings" % (instr, len(m)))
+#            for mpn in m:
+#                print ("  -- %s" % (str(mpn)))
 
+
+    print("Constructing db objects for thread, process, and mapping")
     # construct db process, and for each,
     # create associated threads and mappings and connect them up
     db_sav_procs = {}
     db_sav_threads = {}
     db_sav_mappings = {}
-#    for process, mapping_list in mappings.items():
     for process in processes:
+#    for process in mappings.keys():
         (pid,ppid) = process
         if debug:
             print("Creating db process pid-%d ppid=%d for execution" % process)
@@ -229,8 +303,9 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                        (tnames, tid, thread_create_time))
         db_proc.threads = db_threads
         if (process in mappings):
-            db_mappings = []
-            for (instr,asid,one_mappings) in mapping_list:
+            db_proc.mappings = []
+#            db_mappings = []
+            for (instr,asid,one_mappings) in mappings[process]: # mapping_list:
                 for mapping in one_mappings:
                     (m_name, m_file, m_base, m_size) = mapping
                     db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=m_base, execution=db_execution)
@@ -241,48 +316,34 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                     if debug:
                         print("** Creating mapping for that process name=%s path=%s base=that virtual addr size=%d" % \
                                (m_name, m_file, m_size))
-                    db_mappings.append(db_mapping)
-
-            db_proc.mappings = db_mappings
+                    db_proc.mappings.append(db_mapping)
+#            db_proc.mappings = db_mappings
         db_sav_procs[process] = db_proc
         s.add(db_proc)
 
     s.commit()
+    print ("committed")
 
     # find mapping that corresponds best to this code point
     # at this instr count
-    def get_module_offset(cp):
+    def get_module_offset(srcsink):
+        cp = srcsink.cp
         thread = (cp.thread.tid, cp.thread.create_time)
         if not (thread in thread2proc):
             return None
         process = thread2proc[thread]
-        last_mappings = None
-        for mapping_process, mtup_list in mappings.items():
-            if mapping_process == process:
-                # the process for this mapping is same as for code point
-                # now find best mapping for instr count of code point
-                for mtup in mtup_list:
-                    (mapping_instr, mapping_asid, mapping_list) = mtup
-                    if mapping_instr <= cp.instr:
-                        # instr count for this mapping is *prior
-                        # to the instr count of the Code point
-                        last_mappings = mtup
-                    if mapping_instr > cp.instr:
-                        # this mapping is for *after our code point
-                        # instr count, so we'll use last_mappings
-                        # if we have it
-                        if last_mappings is None:
-                            # we dont.  fail
-                            return None
-                        # ok we have a mapping.  see if it contains
-                        # our code point pc
-                        (mapping_instr, mapping_asid, mapping_list) = last_mappings
-                        for mapping in mapping_list:
-                            (name, filename, base, size) = mapping
-                            if cp.pc >= base and cp.pc <= (base+size-1):
-                                # found a mapping that contains our pc
-                                return (mapping_instr, mapping, cp.pc - base)
-        return None
+        retv = None
+        for db_mapping in db_sav_procs[process].mappings:
+            #  db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
+            instr = db_mapping.base.execution_offset
+            if instr <= srcsink.instr:
+                base = db_mapping.base.address
+                size = db_mapping.size 
+                if cp.pc >= base and cp.pc <= (base+size-1):
+                    retv = (db_mapping, cp.pc - base)
+        return retv
+                    
+
 
     # find db rows for process and thread indicated, if its there.
     def get_db_process_thread(db_execution, thr):
@@ -310,49 +371,27 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
         db_proc.mappings.append(db_mapping)
         return db_mapping
 
-    # debugging stuff...
-    def in_xmllint(pc):
-        intervals = [
-            (0x555555563000, 2150400),
-            (0x555555554000, 2211840),
-            (0x555555554000, 61440),
-            (0x555555762000, 8192),
-            (0x555555763000, 4096),
-            (0x555555762000, 4096)]
-        for (base,size) in intervals:
-            if (pc >= base and pc <= (base+size)):
-                return True
-        return False
 
-    def in_libxml(pc):
-        intervals = [
-            (0x7ffff7dd2000,8192),
-            (0x7ffff7a77000,1392640),
-            (0x7ffff7dca000,40960),
-            (0x7ffff7a77000,3530752),
-            (0x7ffff7dca000,32768),
-            (0x7ffff7bcb000,2138112),
-            (0x7ffff7dd4000,4096),
-            (0x7ffff7dca000,45056),
-            (0x7ffff7bcb000,2093056)]
-        for (base,size) in intervals:
-            if (pc >= base and pc <= (base+size)):
-                return True
-        return False
 
+    print("3rd pass over plog -- reading flows and syscalls")
     # another pass over the plog to
     # read Flows from tsm and transform them
     # into module/offset
-    next_instr = 1000000
-    num_write_read_flows = 0
+    instr_inc = 10000
+    next_instr = instr_inc
+    num_taint_flows = 0
     code_points = set([])
+    t1 = time.time()
     with PLogReader(pandalog) as plr:
+        ii = 0 
         for i, msg in enumerate(plr):
+            ii += 1
+            if (ii == NN): break
             if msg.instr > next_instr:
                 print("time=%.2f sec: Hit instr=%d" % (time.time() - start_time, next_instr))
-                if num_write_read_flows > 0:
-                    print ("num_write_read_flow=%d " % num_write_read_flows)
-                next_instr += 1000000
+                if num_taint_flows > 0:
+                    print ("num_taint_flow=%d " % num_taint_flows)
+                next_instr += instr_inc
 
             if msg.HasField("asid_info"):
                 ai = msg.asid_info
@@ -366,7 +405,8 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                                          end_execution_offset=ai.end_instr)
                     s.add(db_thread_slice)
 
-            if msg.HasField("syscall"):
+            # syscall field not *required* 
+            if hasfield(msg, "syscall"):
 
                 def syscall_value(a, scarg):
                     if scarg.HasField("str"):
@@ -417,64 +457,77 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
                     s.add(a)
                     i += 1
 
-            # tolerate this field being missing
-            try:
-                if False and msg.HasField("write_read_flow"):
-                    wrf = msg.write_read_flow
 
-                    pt = get_db_process_thread(db_execution, wrf.src.thread)
-                    if pt is None:
-                        continue
-                    (db_src_process, db_src_thread) = pt
-                    pt = get_db_process_thread(db_execution, wrf.dest.thread)
-                    if pt is None:
-                        continue
-                    (db_dest_process, db_dest_thread) = pt
+            if hasfield(msg, "taint_flow"):
 
-                    src_mo = get_module_offset(wrf.src)
-                    dest_mo = get_module_offset(wrf.dest)
-                    if (src_mo is None) or (dest_mo is None):
-                        continue
+                tf = msg.taint_flow
 
-                    (src_mapping_instr, src_mapping, src_offset) = src_mo
-                    (dest_mapping_instr, dest_mapping, dest_offset) = dest_mo
-
-                    db_src_mapping = get_db_mapping(db_execution, db_src_process, msg.asid, src_mapping_instr, src_mapping)
-                    db_dest_mapping = get_db_mapping(db_execution, db_dest_process, msg.asid, dest_mapping_instr, dest_mapping)
-
-                    p_src = (db_src_mapping, src_offset)
-                    p_dest = (db_dest_mapping, dest_offset)
+                pt = get_db_process_thread(db_execution, tf.source.cp.thread)
+                if pt is None:
+                    continue
+                (db_source_process, db_source_thread) = pt
+                pt = get_db_process_thread(db_execution, tf.sink.cp.thread)
+                if pt is None:
+                    continue
+                (db_sink_process, db_sink_thread) = pt
 
 
-                    db_src_code_point = pe.CodePoint(mapping=db_src_mapping, offset=src_offset)
-                    db_dest_code_point = pe.CodePoint(mapping=db_dest_mapping, offset=dest_offset)
 
-                    code_points.add(p_src)
-                    code_points.add(p_dest)
+                source_mo = get_module_offset(tf.source)
+                sink_mo = get_module_offset(tf.sink)
+                if (source_mo is None) or (sink_mo is None):
+                    continue
 
-                    db_write_read_flow = pe.WriteReadFlow(write=db_src_code_point, \
-                                                          write_thread = db_src_thread,\
-                                                          write_execution_offset = wrf.src.instr, \
-                                                          read=db_dest_code_point, \
-                                                          read_thread = db_dest_thread, \
-                                                          read_execution_offset = wrf.dest.instr)
-                    # execution_offset:
-                    # this is instruction count of the read, really
-                    # should we have write instr count as well?
-                    s.add(db_write_read_flow)
-                    num_write_read_flows += 1
-            except:
-                pass
+
+
+                (db_source_mapping, source_offset) = source_mo
+                (db_sink_mapping, sink_offset) = sink_mo
+
+
+#                db_source_mapping = get_db_mapping(db_execution, db_source_process, msg.asid, source_mapping_instr, source_mapping)
+#                db_sink_mapping = get_db_mapping(db_execution, db_sink_process, msg.asid, sink_mapping_instr, sink_mapping)
+                
+#                p_source = (db_source_mapping, source_offset)
+#                p_sink = (db_sink_mapping, sink_offset)
+                                
+                db_source_code_point = pe.CodePoint(mapping=db_source_mapping, offset=source_offset)
+                db_sink_code_point = pe.CodePoint(mapping=db_sink_mapping, offset=sink_offset)
+                
+ #               code_points.add(p_source)
+#                code_points.add(p_sink)
+                
+                db_taint_flow = pe.TaintFlow(
+                    source_is_store = tf.source.is_store, \
+                    source = db_source_code_point, \
+                    source_thread = db_source_thread, \
+                    source_execution_offset = tf.source.instr, \
+                    sink = db_sink_code_point, \
+                    sink_thread = db_sink_thread, \
+                    sink_execution_offset = tf.sink.instr)
+                
+                s.add(db_taint_flow)
+                num_taint_flows += 1
 
     print("db commit...")
+    t_pre_commit = time.time()
     s.commit()
+    t2 = time.time()
+    print ("time to commit: %.2f sec" % (t2 - t_pre_commit))
+
     print("final time: %.2f sec" % (time.time() - start_time))
+
+
+    
+    print ("%.2f sec for 3rd pass" % (t2-t1))
+
+    print ("num_taint_flows = %d" % num_taint_flows)
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
-    parser.add_argument("-db_url", help="db url", action="store")
-    parser.add_argument("-pandalog", help="pandalog", action="store")
+    parser.add_argument("-db_url", help="db url", action="store", required=True)
+    parser.add_argument("-pandalog", help="pandalog", action="store", required=True)
     parser.add_argument("-exec_start", "--exec-start", help="Start time for execution", action="store", default=None)
     parser.add_argument("-exec_end", "--exec-end", help="End time for execution", action="store", default=None)
 
@@ -483,11 +536,22 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-#    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
-#    if database_exists(db_url):
-#        drop_database(db_url)
-#    create_database(db_url)
-#    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
-#    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
+##    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
+##    if database_exists(db_url):
+##        drop_database(db_url)
+##    create_database(db_url)
+##    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
+##    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
 
+#    exec_name="lots" 
+#    db_url="postgres://tleek:tleek123@localhost/pandelephant1"
+#    pandalog="/home/tleek/git/panda-leet/tsm/slash-tsm.plog-tcn-100"
+#    pandalog="/home/tleek/toy/_home_tleek_toy_toy_debug.plog"
+
+    print("%s %s" % (args.db_url, args.exec_name))
     plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
+
+#    plog_to_pe(pandalog, db_url, exec_name, None, None)
+
+
+#PYTHONPATH=/home/tleek/git/panda/panda/scripts python3 ./scripts/plog_to_pandelephant.py -pandalog ~/git/panda/build/foo.plog -exec_name test -db_url postgres://tleek:tleek123@localhost/pandelephant
