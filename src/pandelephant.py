@@ -38,6 +38,7 @@ class Execution(Base):
     end_time = Column(DateTime(timezone=True)) # guest time
     processes = relationship("Process", back_populates="execution")
     recording = relationship("Recording", back_populates="execution", uselist=False)
+    analysis = relationship("Analysis", back_populates="execution", uselist=False)
 
 class Recording(Base):
     __tablename__ = 'recordings'
