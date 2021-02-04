@@ -38,20 +38,16 @@ class Execution(Base):
     end_time = Column(DateTime(timezone=True)) # guest time
     processes = relationship("Process", back_populates="execution")
     recording = relationship("Recording", back_populates="execution", uselist=False)
-    analysis = relationship("Analysis", back_populates="execution", uselist=False)
 
 class Recording(Base):
     __tablename__ = 'recordings'
     recording_id = Column(Integer, primary_key=True)
-    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)    
-    input_file_name = Column(String, nullable=False)
-    # this is the recording prefix 
-    prefix = Column(String, nullable=False)
+    execution_id = Column(Integer, ForeignKey('executions.execution_id'), nullable=False)
+    file_name = Column(String, nullable=False)
     log_hash = Column(LargeBinary, unique=True, nullable=False)
     snapshot_hash = Column(LargeBinary, unique=True, nullable=False)
     qcow_hash = Column(LargeBinary) # hash of the QCOW used to make the recording taken before the recording
     execution = relationship("Execution", back_populates="recording", uselist=False)
-
 
 # Note: every process must have at least one associated thread
 class Process(Base):
