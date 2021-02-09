@@ -73,11 +73,16 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     s = pe.Session()
 
     execution_start_datetime = datetime.now()
-    try:
-        db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
-        s.add(db_execution)
-    except Exception as e:
-        print(str(e))
+    dbq = s.query(pe.Execution).filter(pe.Execution.name == exec_name)
+    if dbq.count() == 0:
+        try:
+            db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
+            s.add(db_execution)
+        except Exception as e:
+            print(str(e))
+    else:
+        assert (dbq.count() == 1)
+        db_execution = dbq.one()
 
     procs = {}
 
@@ -97,7 +102,9 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     # Better would be if we had callback on after-scheduler-changes-proc
     #  s.t. we could obtain proc/thread. 
 
+    # thread is (pid, ppid, tid, create_time)
     threads = set([])
+    # process is (pid, ppid)
     processes = set([])
     def collect_thread(pid, ppid, tid, create_time):
         thread = (pid, ppid, tid, create_time)
@@ -177,7 +184,12 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     # 
     # This time to get mappings for processes 
     # and names for each tid
+
+    # Note. mappings[process] is sequence of mappings we saw for that process
+    # each element in this array is a triple (instrcount, asid, m)
+    # where m is the array of mappings observed at that instruction count
     mappings = {}
+
     tid_names = {}
     tids = {}
     num_discard = 0
@@ -324,8 +336,13 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     s.commit()
     print ("committed")
 
+
     # find mapping that corresponds best to this code point
     # at this instr count
+    # that is, we have a temporal sequence of mappings for the process this thread is part of.
+    # we want the mapping that makes most sense given this srcsink which also has an instruction count
+    # so we search for mappings for that process that is most immediately prior to instr count
+    # for the srcsink
     def get_module_offset(srcsink):
         cp = srcsink.cp
         thread = (cp.thread.tid, cp.thread.create_time)
