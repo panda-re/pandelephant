@@ -309,8 +309,8 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
         db_threads = []
         for thread in proc2threads[process]:
             (tid, thread_create_time) = thread
-            tnames = list(tid_names[thread]) if thread in tid_names else []
-            db_thread = db.Thread(names=tnames, tid=tid, \
+            tnames = list([ pe.ThreadName(thread_id=tid, name=tname) for tname in tid_names[thread] ]) if thread in tid_names else []
+            db_thread = pe.Thread(names=tnames, tid=tid, \
                                   create_time = thread_create_time)
             s.add(db_thread)
             db_threads.append(db_thread)
@@ -536,9 +536,6 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
     print ("time to commit: %.2f sec" % (t2 - t_pre_commit))
 
     print("final time: %.2f sec" % (time.time() - start_time))
-
-<<<<<<< HEAD:pandelephant/parser/parser.py
-
     
     print ("%.2f sec for 3rd pass" % (t2-t1))
 
