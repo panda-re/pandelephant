@@ -8,10 +8,14 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     postgresql-client \
     vim unzip python3-pip tmux screen
 
-# Fix pypanda bug to ensure syscalls2 can load ds files by updating LD_LIBRARY_PATH explicitly
-ENV LD_LIBRARY_PATH "/usr/local/lib/python3.8/dist-packages/pandare/data//mips-softmmu/panda/plugins/:~/usr/local/lib/python3.8/dist-packages/pandare/data//arm-softmmu/panda/plugins/"
+# Workaround PANDA issue #901
+ENV LD_LIBRARY_PATH "/usr/local/lib/python3.8/dist-packages/pandare/data/mips-softmmu/panda/plugins/:/usr/local/lib/python3.8/dist-packages/pandare/data//arm-softmmu/panda/plugins/"
 
 RUN mkdir /pandelephant
-COPY . /pandelephant/
+
+# Install requirements before copying everything
 WORKDIR /pandelephant
+COPY requirements.txt .
 RUN pip install -r requirements.txt
+
+COPY . /pandelephant/

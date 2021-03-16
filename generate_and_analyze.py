@@ -68,7 +68,7 @@ for ex in ds.get_executions():
     threads = ds.get_proc_threads(ex.execution_id)
     procs = [] # (name, pid, ppid)
     for thread in threads:
-        proc_names = thread.threads[0].names
+        proc_names = [x.name for x in thread.threads[0].names]
         if len(proc_names) > 1 and "bash" in proc_names:
             proc_names.remove("bash")
         procs.append((", ".join(proc_names), thread.pid, thread.ppid))
@@ -90,9 +90,10 @@ for ex in ds.get_executions():
     procs = [] # (name, pid, ppid)
     for process in processes:
         for thread in process.threads:
-            if len(thread.names) > 1 and "bash" in thread.names:
-                thread.names.remove("bash")
-            print(f"{', '.join(thread.names)} pid {process.pid}, tid {thread.tid}, created at {thread.create_time}")
+            thread_names = [x.name for x in thread.names]
+            if len(thread_names) > 1 and "bash" in thread_names:
+                thread_names.remove("bash")
+            print(f"{', '.join(thread_names)} pid {process.pid}, tid {thread.tid}, created at {thread.create_time}")
 
             s = ds.Session()
             counts = s.query(db.Syscall, func.count(db.Syscall.name)) \

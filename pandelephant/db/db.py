@@ -118,7 +118,7 @@ class Thread(Base):
     create_time = Column(BigInteger, nullable=False)
     end_time = Column(DateTime(timezone=True))
     process = relationship("Process", back_populates="threads")
-    names = relationship("ThreadName", back_populates="thread")
+    names = relationship("ThreadName", back_populates="thread", lazy='joined')
 
 class Mapping(Base):
     __tablename__ = 'mappings'
