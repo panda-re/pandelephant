@@ -106,7 +106,7 @@ class Process(Base):
 class ThreadName(Base):
     __tablename__ = 'thread_names'
     id = Column(Integer, primary_key=True)
-    thread_id = Column(Integer, ForeignKey('threads.process_id'), nullable=False)
+    thread_id = Column(Integer, ForeignKey('threads.thread_id'), nullable=False)
     name = Column(String)
     thread = relationship("Thread", back_populates="names")
 
