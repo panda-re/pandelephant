@@ -77,7 +77,7 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
     s = ds.Session()
 
     execution_start_datetime = datetime.now()
-    dbq = s.query(pe.Execution).filter(pe.Execution.name == exec_name)
+    dbq = s.query(db.Execution).filter(db.Execution.name == exec_name)
     if dbq.count() == 0:
         try:
             db_execution = db.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
@@ -309,8 +309,8 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
         db_threads = []
         for thread in proc2threads[process]:
             (tid, thread_create_time) = thread
-            tnames = list([ pe.ThreadName(thread_id=tid, name=tname) for tname in tid_names[thread] ]) if thread in tid_names else []
-            db_thread = pe.Thread(names=tnames, tid=tid, \
+            tnames = list([ db.ThreadName(thread_id=tid, name=tname) for tname in tid_names[thread] ]) if thread in tid_names else []
+            db_thread = db.Thread(names=tnames, tid=tid, \
                                   create_time = thread_create_time)
             s.add(db_thread)
             db_threads.append(db_thread)
@@ -356,7 +356,7 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
         process = thread2proc[thread]
         retv = None
         for db_mapping in db_sav_procs[process].mappings:
-            #  db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
+            #  db_mapping = db.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
             instr = db_mapping.base.execution_offset
             if instr <= srcsink.instr:
                 base = db_mapping.base.address
@@ -511,13 +511,13 @@ def consume_plog(pandalog, db_url, exec_name, exec_start=None, exec_end=None, PL
 #                p_source = (db_source_mapping, source_offset)
 #                p_sink = (db_sink_mapping, sink_offset)
                                 
-                db_source_code_point = pe.CodePoint(mapping=db_source_mapping, offset=source_offset)
-                db_sink_code_point = pe.CodePoint(mapping=db_sink_mapping, offset=sink_offset)
+                db_source_code_point = db.CodePoint(mapping=db_source_mapping, offset=source_offset)
+                db_sink_code_point = db.CodePoint(mapping=db_sink_mapping, offset=sink_offset)
                 
  #               code_points.add(p_source)
 #                code_points.add(p_sink)
                 
-                db_taint_flow = pe.TaintFlow(
+                db_taint_flow = db.TaintFlow(
                     source_is_store = tf.source.is_store, \
                     source = db_source_code_point, \
                     source_thread = db_source_thread, \
@@ -559,8 +559,8 @@ def main(args):
 ##    if database_exists(db_url):
 ##        drop_database(db_url)
 ##    create_database(db_url)
-##    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
-##    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
+##    db.init("postgres://tleek:tleek123@localhost/pandelephant1")
+##    db = db.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
 
 #    exec_name="lots" 
 #    db_url="postgres://tleek:tleek123@localhost/pandelephant1"
