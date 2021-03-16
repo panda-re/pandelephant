@@ -20,14 +20,13 @@ class DataStore():
         # Helper to get a DB Session and store it in our (global) Session object
         # example:
         # from pandelephant import db
-        # db.create_session("foo")
-        # s = db.Session()
-        # s.add(...)
+        # ds = db.DataStore("sqlite:///foo.sqlite")
+        # print(ds.get_executions())
 
         if debug:
             print(f"Creating connection to {url}")
         engine = create_engine(url, echo=debug, poolclass=StaticPool)
-        self.Session = sessionmaker(bind=engine)
+        self.Session = sessionmaker(bind=engine, expire_on_commit=False)
 
         # Attempt to connect up to `retries` times
         success = False
