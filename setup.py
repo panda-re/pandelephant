@@ -24,6 +24,7 @@ setuptools.setup(
         'generate_py_protobufs': {
             'source_dir':        'protos',
             'output_dir':        'src',  # default '.'
+            'proto_files':       ['protos/models.proto'],
         },
     },
 )
