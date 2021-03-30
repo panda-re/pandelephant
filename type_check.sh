@@ -27,6 +27,10 @@ done < <(find $(dirname "$0") -type f -name "*.py")
 echo -e "\n${YELLOW}Running type checks...${NORMAL}\n"
 for file_path in "${py_src_files[@]}"
 do
+    if [[ "$file_path" == *_pb2.py ]]; then
+        continue
+    fi
+
     eval "${mypy_cmd[@]} $file_path"
     ret_code=$?
     if [ "$ret_code" -eq 0 ]; then
