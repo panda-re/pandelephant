@@ -37,9 +37,6 @@ class Execution(BaseModel):
         for p in db_object.processes:
             processes.add(p.process_id)
         return Execution(db_object.execution_id, db_object.name, processes, description=db_object.description)
-
-    def uuid(self) -> uuid.UUID:
-        return self._uuid
     
     def name(self) -> str:
         return self._name
