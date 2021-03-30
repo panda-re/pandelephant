@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Union, Dict, List, Any
+from typing import Union, Dict, List, Optional
 import uuid
 from datetime import datetime
 from . import models_pb2 as pb
@@ -8,6 +8,10 @@ from . import _db_models
 from abc import ABC, abstractmethod
 
 class BaseModel(ABC):
+
+    def __init__(self, uuid: uuid.UUID):
+        self._uuid = uuid
+
     @abstractmethod
     def _from_db(db_object):
         raise NotImplementedError
@@ -26,8 +30,8 @@ def _set_of_uuid_to_list_of_string(s: set[uuid.UUID]) -> List[str]:
     return ret
 
 class Execution(BaseModel):
-    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: set[uuid.UUID], description: str = None) -> Execution:
-        self._uuid = uuid
+    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: set[uuid.UUID], description: str = None):
+        super().__init__(uuid)
         self._name = name
         self._process_uuids = process_uuids
         self._description = description
@@ -41,7 +45,7 @@ class Execution(BaseModel):
     def name(self) -> str:
         return self._name
 
-    def description(self) -> str:
+    def description(self) -> Optional[str]:
         return self._description
 
     def process_uuids(self) -> set[uuid.UUID]:
@@ -71,13 +75,13 @@ class Recording(Execution):
     def instruction_count(self) -> int:
         return self._instruction_count
 
-    def log_hash(self) -> list[bytes]:
+    def log_hash(self) -> List[bytes]:
         return self._log_hash
 
-    def snapshop_hash(self) -> list[bytes]:
+    def snapshop_hash(self) -> List[bytes]:
         return self._snapshot_hash
     
-    def qcow_hash(self) -> list[bytes]:
+    def qcow_hash(self) -> Optional[List[bytes]]:
         return self._qcow_hash
 
     def to_pb(self):
@@ -85,8 +89,8 @@ class Recording(Execution):
         return pb.Recording(execution=e, prefix=self.prefix(), instruction_count=self.instruction_count(), log_hash=self.log_hash(), snapshot_hash=self.snapshop_hash(), qcow_hash=self.qcow_hash())
     
 class Process(BaseModel):
-    def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, create_time: int, pid: int, ppid: int, thread_uuids: set[uuid.UUID], mapping_uuids: set[uuid.UUID]) -> Process:
-        self._uuid = uuid
+    def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, create_time: int, pid: int, ppid: int, thread_uuids: set[uuid.UUID], mapping_uuids: set[uuid.UUID]):
+        super().__init__(uuid)
         self._execution_uuid = execution_uuid
         self._create_time = create_time
         self._pid = pid
@@ -126,7 +130,7 @@ class Process(BaseModel):
 
 class Thread(BaseModel):
     def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, create_time: int, tid: int,  names: set[str]):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._process_uuid = process_uuid
         self._tid = tid
         self._create_time = create_time
@@ -155,7 +159,7 @@ class Thread(BaseModel):
         
 class Mapping(BaseModel):
     def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, name: str, path: str, base_uuid: uuid.UUID, size: int, first_seen_execution_offset: int, last_seen_execution_offset: int):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._process_uuid = process_uuid
         self._name = name
         self._path = path
@@ -193,7 +197,7 @@ class Mapping(BaseModel):
 
 class VirtualAddress(BaseModel):
     def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, asid: int, execution_offset: int, address: int):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._execution_uuid = execution_uuid
         self._asid = asid
         self._execution_offset = execution_offset
@@ -219,7 +223,7 @@ class VirtualAddress(BaseModel):
 
 class CodePoint(BaseModel):
     def __init__(self, uuid: uuid.UUID, mapping_uuid: uuid.UUID, offset: int):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._mapping_uuid = mapping_uuid
         self._offset = offset
 
@@ -237,8 +241,8 @@ class CodePoint(BaseModel):
 
 
 class TaintFlow(BaseModel):
-    def __init__(self, uuid: uuid.UUD, is_store: bool, source_code_point_uuid: uuid.UUID, source_thread_uuid: uuid.UUID, source_execution_offset: int, sink_code_point_uuid: uuid.UUID, sink_thread_uuid: uuid.UUID, sink_execution_offset: int):
-        self._uuid = uuid
+    def __init__(self, uuid: uuid.UUID, is_store: bool, source_code_point_uuid: uuid.UUID, source_thread_uuid: uuid.UUID, source_execution_offset: int, sink_code_point_uuid: uuid.UUID, sink_thread_uuid: uuid.UUID, sink_execution_offset: int):
+        super().__init__(uuid)
         self._is_store = is_store
         self._source_code_point_uuid = source_code_point_uuid
         self._source_thread_uuid = source_thread_uuid
@@ -277,7 +281,7 @@ class TaintFlow(BaseModel):
 
 class ThreadSlice(BaseModel):
     def __init__(self, uuid: uuid.UUID, thread_uuid: uuid.UUID, start_execution_offset: int, end_execution_offset: int):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._thread_uuid = thread_uuid
         self._start_execution_offset = start_execution_offset
         self._end_execution_offset = end_execution_offset
@@ -299,7 +303,7 @@ class ThreadSlice(BaseModel):
 
 class Syscall(BaseModel):
     def __init__(self, uuid: uuid.UUID, thread_uuid: uuid.UUID, name: str, arguments: List[Dict[str, Union[str, int, bool]]], execution_offset: int):
-        self._uuid = uuid
+        super().__init__(uuid)
         self._thread_uuid = thread_uuid
         self._name = name
         self._arguments = arguments

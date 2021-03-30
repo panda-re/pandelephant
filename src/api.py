@@ -2,9 +2,10 @@ from __future__ import annotations
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.pool import Pool
-from typing import List
+from typing import List, Union, Dict
 from . import _db_models
 from . import _models
+import uuid
 
 class SessionTransactionWrapper:
         def __init__(self, session):
@@ -42,7 +43,7 @@ class PandaDatastore:
                 ret.append(_models.Execution._from_db(e))
             return ret
 
-    def get_execution_by_uuid(self, execution_uuid: uuid) -> _models.Execution:
+    def get_execution_by_uuid(self, execution_uuid: uuid.UUID) -> _models.Execution:
         with SessionTransactionWrapper(self.session_maker()) as s:
             e = s.query(_db_models.Execution).filter(_db_models.Execution.execution_id == execution_uuid).one()
             return _models.Execution._from_db(e)
@@ -62,7 +63,7 @@ class PandaDatastore:
                 ret.append(_models.Recording._from_db(e))
             return ret
 
-    def get_recording_by_uuid(self, recording_uuid: uuid) -> _models.Recording:
+    def get_recording_by_uuid(self, recording_uuid: uuid.UUID) -> _models.Recording:
         with SessionTransactionWrapper(self.session_maker()) as s:
             r = s.query(_db_models.Recording).filter(_db_models.Recording.recording_id == recording_uuid).one()
             return _models.Recording._from_db(r)
@@ -104,14 +105,14 @@ class PandaDatastore:
             s.commit()
             return _models.TaintFlow._from_db(taintflow)
 
-    def new_threadslice(self, thread: _model.Thread, start_execution_offset: int, end_execution_offset: int) -> _models.ThreadSlice:
+    def new_threadslice(self, thread: _models.Thread, start_execution_offset: int, end_execution_offset: int) -> _models.ThreadSlice:
         with SessionTransactionWrapper(self.session_maker()) as s:
             ts = _db_models.ThreadSlice(thread_id=thread.uuid(), start_execution_offset=start_execution_offset, end_execution_offset=end_execution_offset)
             s.add(ts)
             s.commit()
             return _models.ThreadSlice._from_db(ts)
 
-    def new_syscall(self, thread: _model.Thread, name: str, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int) -> _models.Syscall:
+    def new_syscall(self, thread: _models.Thread, name: str, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int) -> _models.Syscall:
         with SessionTransactionWrapper(self.session_maker()) as s:
             db_args = []
             for i in range(len(args)):
@@ -132,7 +133,7 @@ class PandaDatastore:
                 elif a['type'] == 'signed16':
                     db_type = _db_models.ArgType.UNSIGNED_16
                 else:
-                    raise Exception("Unregonized Argument Type: " + a["type"])
+                    raise Exception("Unregonized Argument Type: " + str(a["type"]))
                 
                 db_args.append(_db_models.SyscallArgument(name=a['name'], position=i, argument_type=db_type, value=str(a['value'])))
             syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, arguments=db_args, execution_offset=execution_offset)
