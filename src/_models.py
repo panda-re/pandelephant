@@ -35,13 +35,13 @@ class Execution(BaseModel):
         self._name = name
         self._process_uuids = process_uuids
         self._description = description
-    
+
     def _from_db(db_object: _db_models.Execution) -> Execution:
         processes = set([])
         for p in db_object.processes:
             processes.add(p.process_id)
         return Execution(db_object.execution_id, db_object.name, processes, description=db_object.description)
-    
+
     def name(self) -> str:
         return self._name
 
@@ -80,14 +80,14 @@ class Recording(Execution):
 
     def snapshop_hash(self) -> List[bytes]:
         return self._snapshot_hash
-    
+
     def qcow_hash(self) -> Optional[List[bytes]]:
         return self._qcow_hash
 
     def to_pb(self):
         e = super().to_pb()
         return pb.Recording(execution=e, prefix=self.prefix(), instruction_count=self.instruction_count(), log_hash=self.log_hash(), snapshot_hash=self.snapshop_hash(), qcow_hash=self.qcow_hash())
-    
+
 class Process(BaseModel):
     def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, create_time: int, pid: int, ppid: int, thread_uuids: set[uuid.UUID], mapping_uuids: set[uuid.UUID]):
         super().__init__(uuid)
@@ -97,7 +97,7 @@ class Process(BaseModel):
         self._ppid = ppid
         self._thread_uuids = thread_uuids
         self._mapping_uuids = mapping_uuids
-    
+
     def _from_db(db_object: _db_models.Process) -> Process:
         threads = set([])
         mappings = set([])
@@ -112,7 +112,7 @@ class Process(BaseModel):
 
     def create_time(self) -> int:
         return self._create_time
-    
+
     def pid(self) -> int:
         return self._pid
 
@@ -124,7 +124,7 @@ class Process(BaseModel):
 
     def mapping_uuids(self) -> set[uuid.UUID]:
         return self._mapping_uuids
-    
+
     def to_pb(self):
         return pb.Process(uuid=str(self.uuid()), execution_uuid=str(self.execution_uuid()), create_time=self.create_time(), pid=self.pid(), ppid=self.ppid(), thread_uuids=_set_of_uuid_to_list_of_string(self.thread_uuids()), mapping_uuids=_set_of_uuid_to_list_of_string(self.mapping_uuids()))
 
@@ -135,7 +135,7 @@ class Thread(BaseModel):
         self._tid = tid
         self._create_time = create_time
         self._names = names
-    
+
     def _from_db(db_object: _db_models.Thread) -> Thread:
         names = set([])
         for n in db_object.names:
@@ -156,7 +156,7 @@ class Thread(BaseModel):
 
     def to_pb(self):
         return pb.Thread(uuid=str(self.uuid()), process_uuid=str(self.process_uuid()), create_time=self.create_time(), names=list(self.names()))
-        
+
 class Mapping(BaseModel):
     def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, name: str, path: str, base_uuid: uuid.UUID, size: int, first_seen_execution_offset: int, last_seen_execution_offset: int):
         super().__init__(uuid)
@@ -167,7 +167,7 @@ class Mapping(BaseModel):
         self._size = size
         self._first = first_seen_execution_offset
         self._last = last_seen_execution_offset
-    
+
     def _from_db(db_object: _db_models.Mapping) -> Mapping:
         return Mapping(db_object.mapping_id, db_object.process_id, db_object.name, db_object.path, db_object.base_id, db_object.size, db_object.first_seen_execution_offset, db_object.last_seen_execution_offset)
 
@@ -179,21 +179,21 @@ class Mapping(BaseModel):
 
     def path(self) -> str:
         return self._path
-    
+
     def base_uuid(self) -> uuid.UUID:
         return self._base_uuid
-    
+
     def size(self) -> int:
         return self._size
 
     def first_seen_execution_offset(self) -> int:
         return self._first
-    
+
     def last_seen_execution_offset(self) -> int:
         return self._last
 
     def to_pb(self):
-        return pb.Mapping(uuid=str(self.uuid()), process_uuid=str(self.process_uuid()), name=self.name(), path=self.path(), base_uuid=str(self.base_uuid()), size=self.size(), first_seen_execution_offset=self.first_seen_execution_offset(), last_seen_execution_offset=self.last_seen_execution_offset()) 
+        return pb.Mapping(uuid=str(self.uuid()), process_uuid=str(self.process_uuid()), name=self.name(), path=self.path(), base_uuid=str(self.base_uuid()), size=self.size(), first_seen_execution_offset=self.first_seen_execution_offset(), last_seen_execution_offset=self.last_seen_execution_offset())
 
 class VirtualAddress(BaseModel):
     def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, asid: int, execution_offset: int, address: int):
@@ -208,10 +208,10 @@ class VirtualAddress(BaseModel):
 
     def execution_uuid(self) -> uuid.UUID:
         return self._execution_uuid
-    
+
     def asid(self) -> int:
         return self._asid
-    
+
     def execution_offset(self) -> int:
         return self._execution_offset
 
@@ -250,13 +250,13 @@ class TaintFlow(BaseModel):
         self._sink_code_point_uuid = sink_code_point_uuid
         self._sink_thread_uuid = sink_thread_uuid
         self._sink_execution_offset = sink_execution_offset
-    
+
     def _from_db(db_object: _db_models.TaintFlow) -> TaintFlow:
         return TaintFlow(db_object.taint_flow_id, db_object.source_is_store, db_object.source_id, db_object.source_thread_id, db_object.source_execution_offset, db_object.sink_id, db_object.sink_thread_id, db_object.sink_execution_offset)
 
     def is_store(self) -> bool:
         return self._is_store
-    
+
     def source_code_point_uuid(self) -> uuid.UUID:
         return self._source_code_point_uuid
 
@@ -274,7 +274,7 @@ class TaintFlow(BaseModel):
 
     def sink_execution_offset(self) -> int:
         return self._sink_execution_offset
-    
+
     def to_pb(self):
         return pb.TaintFlow(uuid=str(self.uuid()), is_store=self.is_store(), source_code_point_uuid=str(self.source_code_point_uuid()), source_thread_uuid=str(self.source_thread_uuid()), source_execution_offset=self.source_execution_offset(), sink_code_point_uuid=str(self.sink_code_point_uuid()), sink_thread_uuid=str(self.sink_thread_uuid()), sink_execution_offset=self.sink_execution_offset())
 
@@ -288,7 +288,7 @@ class ThreadSlice(BaseModel):
 
     def _from_db(db_object: _db_models.ThreadSlice) -> ThreadSlice:
         return ThreadSlice(db_object.threadslice_id, db_object.thread_id, db_object.start_execution_offset, db_object.end_execution_offset)
-    
+
     def thread_uuid(self) -> uuid.UUID:
         return self._thread_uuid
 
@@ -318,7 +318,7 @@ class Syscall(BaseModel):
                 arg['type'] = 'string'
             else:
                 arg['value'] = int(a.value)
-                
+
             if a.argument_type == _db_models.ArgType.POINTER:
                 arg['pointer'] = True
                 arg['type'] = 'pointer'
@@ -336,18 +336,18 @@ class Syscall(BaseModel):
             elif a.argument_type == _db_models.ArgType.UNSIGNED_16:
                 arg['type'] = 'unsigned16'
             elif a.argument_type == _db_models.ArgType.SIGNED_16:
-                arg['type'] = 'signed16'                                                                
+                arg['type'] = 'signed16'
 
             arguments.append(arg)
-        
+
         return Syscall(db_object.syscall_id, db_object.thread_id, db_object.name, arguments, db_object.execution_offset)
-    
+
     def thread_uuid(self) -> uuid.UUID:
         return self._thread_uuid
 
     def name(self) -> str:
         return self._name
-    
+
     def arguments(self) -> List[Dict[str, Union[str, int, bool]]]:
         return self._arguments
 
@@ -375,5 +375,10 @@ class Syscall(BaseModel):
                     pb_type = pb.ArgumentType.UNSIGNED_16
                 elif a['type'] == 'signed16':
                     pb_type = pb.ArgumentType.SIGNED_16
-                pb_args.append(pb.SyscallArgument(name=a['name'], type=pb_type, number_value=a['value']))                                                                                      
+                pb_args.append(pb.SyscallArgument(name=a['name'], type=pb_type, number_value=a['value']))
         return pb.Syscall(uuid=str(self.uuid()), name=self.name(), arguments=pb_args, thread_uuid=str(self.thread_uuid()), execution_offset=self.execution_offset())
+
+class SyscallDWARF(Syscall):
+    # TODO
+    pass
+

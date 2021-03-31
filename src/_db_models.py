@@ -5,6 +5,7 @@ from sqlalchemy import Column, Boolean, Integer, String, LargeBinary, BigInteger
 from sqlalchemy.orm import relationship
 import enum
 import uuid
+from .utils import sys_cat.SyscallCategory
 Base = declarative_base()
 
 # GUID class taken from https://docs.sqlalchemy.org/en/13/core/custom_types.html#backend-agnostic-guid-type
@@ -50,7 +51,7 @@ class Execution(Base):
     name = Column(String, unique=True, nullable=False) # a short, user supplied name
     description = Column(String) # a longer, human description of the execution
     processes = relationship("Process", back_populates="execution")
-    
+
     __mapper_args__ = {
             'polymorphic_identity': 'Execution',
             'polymorphic_on':type
@@ -106,7 +107,7 @@ class Thread(Base):
             'polymorphic_identity': 'Thread',
             'polymorphic_on':type
     }
-    
+
 
 class Mapping(Base):
     __tablename__ = 'mappings'
@@ -118,7 +119,7 @@ class Mapping(Base):
     base_id = Column(GUID, ForeignKey('virtual_addresses.address_id'), nullable=False)
     base = relationship("VirtualAddress", uselist=False)
     size = Column(BigInteger, nullable=False)
-    first_seen_execution_offset = Column(BigInteger, nullable=False) 
+    first_seen_execution_offset = Column(BigInteger, nullable=False)
     last_seen_execution_offset = Column(BigInteger, nullable=False)
 
     process = relationship("Process", back_populates="mappings")
@@ -180,7 +181,7 @@ class TaintFlow(Base):
     sink_thread = relationship('Thread', foreign_keys=[sink_thread_id], uselist=False)
 
     # execution offsets (replay instr count) for source and sink
-    source_execution_offset = Column(BigInteger, nullable=False) 
+    source_execution_offset = Column(BigInteger, nullable=False)
     sink_execution_offset = Column(BigInteger, nullable=False)
 
     __mapper_args__ = {
@@ -196,13 +197,13 @@ class ThreadSlice(Base):
     threadslice_id = Column(GUID, primary_key=True, default=uuid.uuid4)
     type = Column(String(20))
 
-    # this is the thread 
+    # this is the thread
     thread_id = Column(GUID, ForeignKey('threads.thread_id'), nullable=False)
     thread = relationship('Thread', foreign_keys=[thread_id], uselist=False)
 
     # start and end execution offsets
-    start_execution_offset = Column(BigInteger, nullable=False) 
-    end_execution_offset = Column(BigInteger, nullable=False) 
+    start_execution_offset = Column(BigInteger, nullable=False)
+    end_execution_offset = Column(BigInteger, nullable=False)
 
     __mapper_args__ = {
             'polymorphic_identity': 'ThreadSlice',
@@ -214,9 +215,9 @@ class Syscall(Base):
     __tablename__ = "syscalls"
     syscall_id = Column(GUID, primary_key=True, default=uuid.uuid4)
     type = Column(String(20))
-    
+
     name = Column(String)
-    arguments = relationship("SyscallArgument", back_populates="syscall", order_by="SyscallArgument.position")  
+    arguments = relationship("SyscallArgument", back_populates="syscall", order_by="SyscallArgument.position")
 
     # this is the thread that made the call
     thread_id = Column(GUID, ForeignKey('threads.thread_id'), nullable=False)
@@ -230,6 +231,30 @@ class Syscall(Base):
             'polymorphic_on':type
     }
 
+# TODO: is this subclassing OK? Verify with Andy
+class SyscallDWARF(Syscall):
+
+    '''
+    A system call with 2 additional pieces of semantic information:
+        1. Field granular data for struct arguments (TODO: configurable recursion depth)
+        2. A functional category (non-exhaustive)
+    '''
+
+    __tablename__ = "syscallsDWARF"
+    syscallDWARF_id = Column(GUID, ForeignKey('syscalls.syscall_id'), primary_key=True)
+    # type -> Inherited from parent
+    # name -> Inherited from parent
+    arguments = relationship("SyscallDWARFArgument", back_populates="syscallDWARF", order_by="SyscallDWARFArgument.position")
+    # thread_id -> Inherited from parent
+    # thread -> Inherited from parent
+    # execution -> Inherited from parent
+    category = Column(Enum(SyscallCategory))
+
+    __mapper_args__ = {
+            'polymorphic_identity': 'SyscallDWARF',
+            'polymorphic_on':type
+    }
+
 class ArgType(enum.Enum):
     STRING = 1
     POINTER = 2
@@ -240,6 +265,17 @@ class ArgType(enum.Enum):
     UNSIGNED_16 = 7
     SIGNED_16 = 8
 
+# TODO: is this OK? Verify with Andy
+class StructMember(Base):
+    __tablename__ = "struct_members"
+    struct_member_id = Column(Integer, primary_key=True)
+    syscall_id = Column(GUID, ForeignKey("syscalls.syscall_id"), nullable=False)
+    syscall_dwarf_argument = relationship("SyscallDWARFArgument", back_populates="members", uselist=False)
+    struct_member_name = Column(String)
+    struct_member_type = Column(Enum(ArgType))
+    struct_member_value = Column(String)
+    position = Column(Integer, nullable=False)
+
 class SyscallArgument(Base):
     __tablename__ = "syscall_arguments"
     syscall_argument_id = Column(Integer, primary_key=True)
@@ -249,3 +285,14 @@ class SyscallArgument(Base):
     position = Column(Integer, nullable=False)
     argument_type = Column(Enum(ArgType))
     value = Column(String)
+
+# TODO: is this subclassing OK? Verify with Andy
+class SyscallDWARFArgument(SyscallArgument):
+    __tablename__ = "syscallDWARF_arguments"
+    # syscall_argument_id -> Inherited from parent
+    # syscall_id -> Inherited from parent
+    syscall = relationship("SyscallDWARF", back_populates="arguments", uselist=False)
+    # name -> Inherited from parent
+    # position -> Inherited from parent
+    argument_type = Column(String) # String name of struct type, NOT primitive enum
+    members = relationship("StructMember", back_populates="syscallDWARF", order_by="StructMember.position")
