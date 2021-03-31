@@ -43,8 +43,8 @@ class SyscallCategory(PrintableEnum):
 
 # Dynamic hashmap init (name -> category) ------------------------------------------------------------------------------
 
-_cat_map: Dict[str, str] = json.load(open('sys_cat.json'))
-_cat_map: Dict[str, SyscallCategory] = {k: SyscallCategory[v.upper()] for (k, v) in _cat_map.items()}
+_cat_map_temp: Dict[str, str] = json.load(open('sys_cat.json'))
+_cat_map_final: Dict[str, SyscallCategory] = {k: SyscallCategory[v.upper()] for (k, v) in _cat_map_temp.items()}
 
 # Public API -----------------------------------------------------------------------------------------------------------
 
@@ -63,5 +63,5 @@ def syscall_name_to_category(name: str) -> SyscallCategory:
             return text
 
     name = rm_prefix(name.lower(), "sys_")
-    return _cat_map.get(name, SyscallCategory.OTHER)
+    return _cat_map_final.get(name, SyscallCategory.OTHER)
 

@@ -16,7 +16,15 @@ setuptools.setup(
     package_dir={'pandelephant': 'src'},
     packages = ['pandelephant'],
     python_requires='>=3.6',
-    install_requires=['sqlalchemy'],
+    install_requires=[
+        'psycopg2-binary==2.8.6',
+        'six==1.15.0',
+        'SQLAlchemy==1.3.19',
+        'SQLAlchemy-Utils==0.36.8',
+        'protobuf==3.12.2',
+        'mypy==0.812',
+        'sqlalchemy-stubs==0.4',
+    ],
     extras_require={
         'postgres': ["psycopg2-binary"]
     },
