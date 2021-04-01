@@ -48,6 +48,13 @@ class PandaDatastore:
             e = s.query(_db_models.Execution).filter(_db_models.Execution.execution_id == execution_uuid).one()
             return _models.Execution._from_db(e)
 
+    def get_execution_by_name(self, name: str) -> _models.Execution:
+        with SessionTransactionWrapper(self.session_maker()) as s:
+            e = s.query(_db_models.Execution).filter(_db_models.Execution.name == name).one_or_none()
+            if e:
+                return _models.Execution._from_db(e)
+            return None
+
     def new_recording(self, name: str, prefix: str, instruction_count: int, log_hash: List[bytes], snapshot_hash: List[bytes], description: str = None, qcow_hash: List[bytes] = None):
         with SessionTransactionWrapper(self.session_maker()) as s:
             r = _db_models.Recording(name=name, description=description, prefix=prefix, instruction_count=instruction_count, log_hash=log_hash, snapshot_hash=snapshot_hash, qcow_hash=qcow_hash)
@@ -130,8 +137,10 @@ class PandaDatastore:
                     db_type = _db_models.ArgType.UNSIGNED_32
                 elif a['type'] == 'signed32':
                     db_type = _db_models.ArgType.SIGNED_32
-                elif a['type'] == 'signed16':
+                elif a['type'] == 'unsigned16':
                     db_type = _db_models.ArgType.UNSIGNED_16
+                elif a['type'] == 'signed16':
+                    db_type = _db_models.ArgType.SIGNED_16
                 else:
                     raise Exception("Unregonized Argument Type: " + str(a["type"]))
                 
