@@ -1,5 +1,4 @@
-from __future__ import annotations
-from typing import Union, Dict, List, Optional
+from typing import Union, Dict, List, Optional, Set
 import uuid
 from datetime import datetime
 from . import models_pb2 as pb
@@ -23,20 +22,20 @@ class BaseModel(ABC):
     def to_pb(self):
         raise NotImplementedError
 
-def _set_of_uuid_to_list_of_string(s: set[uuid.UUID]) -> List[str]:
+def _set_of_uuid_to_list_of_string(s: Set[uuid.UUID]) -> List[str]:
     ret = []
     for e in s:
         ret.append(str(e))
     return ret
 
 class Execution(BaseModel):
-    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: set[uuid.UUID], description: str = None):
+    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: Set[uuid.UUID], description: str = None):
         super().__init__(uuid)
         self._name = name
         self._process_uuids = process_uuids
         self._description = description
     
-    def _from_db(db_object: _db_models.Execution) -> Execution:
+    def _from_db(db_object: _db_models.Execution) -> 'Execution':
         processes = set([])
         for p in db_object.processes:
             processes.add(p.process_id)
@@ -48,14 +47,14 @@ class Execution(BaseModel):
     def description(self) -> Optional[str]:
         return self._description
 
-    def process_uuids(self) -> set[uuid.UUID]:
+    def process_uuids(self) -> Set[uuid.UUID]:
         return self._process_uuids
 
     def to_pb(self):
         return pb.Execution(uuid=str(self.uuid()), name=self.name(), process_uuids=_set_of_uuid_to_list_of_string(self.process_uuids()), description=self.description())
 
 class Recording(Execution):
-    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: set[uuid.UUID], prefix: str, instruction_count: int, log_hash: List[bytes], snapshot_hash: List[bytes], description: str = None, qcow_hash: List[bytes] = None):
+    def __init__(self, uuid: uuid.UUID, name: str, process_uuids: Set[uuid.UUID], prefix: str, instruction_count: int, log_hash: List[bytes], snapshot_hash: List[bytes], description: str = None, qcow_hash: List[bytes] = None):
         self._prefix = prefix
         self._instruction_count = instruction_count
         self._log_hash = log_hash
@@ -63,7 +62,7 @@ class Recording(Execution):
         self._qcow_hash = qcow_hash
         super().__init__(uuid, name, process_uuids, description=description)
 
-    def _from_db(db_object: _db_models.Recording) -> Recording:
+    def _from_db(db_object: _db_models.Recording) -> 'Recording':
         processes = set([])
         for p in db_object.processes:
             processes.add(p.process_id)
@@ -89,7 +88,7 @@ class Recording(Execution):
         return pb.Recording(execution=e, prefix=self.prefix(), instruction_count=self.instruction_count(), log_hash=self.log_hash(), snapshot_hash=self.snapshop_hash(), qcow_hash=self.qcow_hash())
     
 class Process(BaseModel):
-    def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, create_time: int, pid: int, ppid: int, thread_uuids: set[uuid.UUID], mapping_uuids: set[uuid.UUID]):
+    def __init__(self, uuid: uuid.UUID, execution_uuid: uuid.UUID, create_time: int, pid: int, ppid: int, thread_uuids: Set[uuid.UUID], mapping_uuids: Set[uuid.UUID]):
         super().__init__(uuid)
         self._execution_uuid = execution_uuid
         self._create_time = create_time
@@ -98,7 +97,7 @@ class Process(BaseModel):
         self._thread_uuids = thread_uuids
         self._mapping_uuids = mapping_uuids
     
-    def _from_db(db_object: _db_models.Process) -> Process:
+    def _from_db(db_object: _db_models.Process) -> 'Process':
         threads = set([])
         mappings = set([])
         for t in db_object.threads:
@@ -119,24 +118,24 @@ class Process(BaseModel):
     def ppid(self) -> int:
         return self._ppid
 
-    def thread_uuids(self) -> set[uuid.UUID]:
+    def thread_uuids(self) -> Set[uuid.UUID]:
         return self._thread_uuids
 
-    def mapping_uuids(self) -> set[uuid.UUID]:
+    def mapping_uuids(self) -> Set[uuid.UUID]:
         return self._mapping_uuids
     
     def to_pb(self):
         return pb.Process(uuid=str(self.uuid()), execution_uuid=str(self.execution_uuid()), create_time=self.create_time(), pid=self.pid(), ppid=self.ppid(), thread_uuids=_set_of_uuid_to_list_of_string(self.thread_uuids()), mapping_uuids=_set_of_uuid_to_list_of_string(self.mapping_uuids()))
 
 class Thread(BaseModel):
-    def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, create_time: int, tid: int,  names: set[str]):
+    def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, create_time: int, tid: int,  names: Set[str]):
         super().__init__(uuid)
         self._process_uuid = process_uuid
         self._tid = tid
         self._create_time = create_time
         self._names = names
     
-    def _from_db(db_object: _db_models.Thread) -> Thread:
+    def _from_db(db_object: _db_models.Thread) -> 'Thread':
         names = set([])
         for n in db_object.names:
             names.add(n.name)
@@ -151,7 +150,7 @@ class Thread(BaseModel):
     def create_time(self) -> int:
         return self._create_time
 
-    def names(self) -> set[str]:
+    def names(self) -> Set[str]:
         return self._names
 
     def to_pb(self):
@@ -168,7 +167,7 @@ class Mapping(BaseModel):
         self._first = first_seen_execution_offset
         self._last = last_seen_execution_offset
     
-    def _from_db(db_object: _db_models.Mapping) -> Mapping:
+    def _from_db(db_object: _db_models.Mapping) -> 'Mapping':
         return Mapping(db_object.mapping_id, db_object.process_id, db_object.name, db_object.path, db_object.base_id, db_object.size, db_object.first_seen_execution_offset, db_object.last_seen_execution_offset)
 
     def process_uuid(self) -> uuid.UUID:
@@ -203,7 +202,7 @@ class VirtualAddress(BaseModel):
         self._execution_offset = execution_offset
         self._address = address
 
-    def _from_db(db_object: _db_models.VirtualAddress):
+    def _from_db(db_object: _db_models.VirtualAddress) -> 'VirtualAddress':
         return VirtualAddress(db_object.address_id, db_object.execution_id, db_object.asid, db_object.execution_offset, db_object.address)
 
     def execution_uuid(self) -> uuid.UUID:
@@ -227,7 +226,7 @@ class CodePoint(BaseModel):
         self._mapping_uuid = mapping_uuid
         self._offset = offset
 
-    def _from_db(db_object: _db_models.CodePoint) -> CodePoint:
+    def _from_db(db_object: _db_models.CodePoint) -> 'CodePoint':
         return CodePoint(db_object.code_point_id, db_object.mapping_id, db_object.offset)
 
     def mapping_uuid(self) -> uuid.UUID:
@@ -251,7 +250,7 @@ class TaintFlow(BaseModel):
         self._sink_thread_uuid = sink_thread_uuid
         self._sink_execution_offset = sink_execution_offset
     
-    def _from_db(db_object: _db_models.TaintFlow) -> TaintFlow:
+    def _from_db(db_object: _db_models.TaintFlow) -> 'TaintFlow':
         return TaintFlow(db_object.taint_flow_id, db_object.source_is_store, db_object.source_id, db_object.source_thread_id, db_object.source_execution_offset, db_object.sink_id, db_object.sink_thread_id, db_object.sink_execution_offset)
 
     def is_store(self) -> bool:
@@ -286,7 +285,7 @@ class ThreadSlice(BaseModel):
         self._start_execution_offset = start_execution_offset
         self._end_execution_offset = end_execution_offset
 
-    def _from_db(db_object: _db_models.ThreadSlice) -> ThreadSlice:
+    def _from_db(db_object: _db_models.ThreadSlice) -> 'ThreadSlice':
         return ThreadSlice(db_object.threadslice_id, db_object.thread_id, db_object.start_execution_offset, db_object.end_execution_offset)
     
     def thread_uuid(self) -> uuid.UUID:
@@ -309,7 +308,7 @@ class Syscall(BaseModel):
         self._arguments = arguments
         self._execution_offset = execution_offset
 
-    def _from_db(db_object: _db_models.Syscall) -> Syscall:
+    def _from_db(db_object: _db_models.Syscall) -> 'Syscall':
         arguments = []
         for a in db_object.arguments:
             arg = {'name': a.name}

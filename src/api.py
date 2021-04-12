@@ -1,4 +1,3 @@
-from __future__ import annotations
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.pool import Pool
