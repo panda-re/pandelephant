@@ -40,12 +40,16 @@ class PandaDatastore:
             ret = []
             for e in executions:
                 ret.append(_models.Execution._from_db(e))
-            return ret
+            if len(ret) > 0:
+                return ret
+            return None
 
     def get_execution_by_uuid(self, execution_uuid: uuid.UUID) -> _models.Execution:
         with SessionTransactionWrapper(self.session_maker()) as s:
-            e = s.query(_db_models.Execution).filter(_db_models.Execution.execution_id == execution_uuid).one()
-            return _models.Execution._from_db(e)
+            e = s.query(_db_models.Execution).filter(_db_models.Execution.execution_id == execution_uuid).one_or_none()
+            if e:
+                return _models.Execution._from_db(e)
+            return None
 
     def get_execution_by_name(self, name: str) -> _models.Execution:
         with SessionTransactionWrapper(self.session_maker()) as s:
@@ -67,12 +71,17 @@ class PandaDatastore:
             ret = []
             for e in recordings:
                 ret.append(_models.Recording._from_db(e))
-            return ret
+
+            if len(ret) > 0:
+                return ret
+            return None
 
     def get_recording_by_uuid(self, recording_uuid: uuid.UUID) -> _models.Recording:
         with SessionTransactionWrapper(self.session_maker()) as s:
-            r = s.query(_db_models.Recording).filter(_db_models.Recording.recording_id == recording_uuid).one()
-            return _models.Recording._from_db(r)
+            r = s.query(_db_models.Recording).filter(_db_models.Recording.recording_id == recording_uuid).one_or_none()
+            if r:
+                return _models.Recording._from_db(r)
+            return None
 
     def new_process(self, execution: _models.Execution, create_time: int, pid: int, ppid: int) -> _models.Process:
         with SessionTransactionWrapper(self.session_maker()) as s:
