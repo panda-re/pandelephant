@@ -311,18 +311,18 @@ class Syscall(BaseModel):
     def _from_db(db_object: _db_models.Syscall) -> 'Syscall':
         arguments = []
         for a in db_object.arguments:
-            arg = {'name': a.name}
+            arg = {'name': a.name, 'pointer': False}
             if a.argument_type == _db_models.ArgType.STRING:
                 arg['value'] = a.value
                 arg['type'] = 'string'
-            else:
-                arg['value'] = int(a.value)
-                
-            if a.argument_type == _db_models.ArgType.POINTER:
+
+            elif a.argument_type == _db_models.ArgType.POINTER:
                 arg['pointer'] = True
                 arg['type'] = 'pointer'
+                arg['value'] = int(a.value, 16) # XXX: stored as a hex string
+
             else:
-                arg['pointer'] = False
+                arg['value'] = int(a.value) # Stored as a dec string
 
             if a.argument_type == _db_models.ArgType.UNSIGNED_64:
                 arg['type'] = 'unsigned64'
