@@ -127,12 +127,15 @@ class PandaDatastore:
             s.commit()
             return _models.ThreadSlice._from_db(ts)
 
-    def new_syscall(self, thread: _models.Thread, name: str, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int) -> _models.Syscall:
+    def new_syscall(self, thread: _models.Thread, name: str, retval: int, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int) -> _models.Syscall:
         with SessionTransactionWrapper(self.session_maker()) as s:
             db_args = []
             for i in range(len(args)):
                 a = args[i]
                 db_type = None
+
+                db_val = str(a['value']) # actual data that gets stored in DB - overloaded just for bytes
+
                 if a['type'] == 'string':
                     db_type = _db_models.ArgType.STRING
                 elif a['type'] == 'pointer':
@@ -149,11 +152,16 @@ class PandaDatastore:
                     db_type = _db_models.ArgType.UNSIGNED_16
                 elif a['type'] == 'signed16':
                     db_type = _db_models.ArgType.SIGNED_16
+                elif a['type'] == 'bytes':
+                    # Bytes is a bit of a pain - we can't store non-null terminated strings in
+                    # the database, so we repr it and drop the leading 'b"' and the trailing '"'
+                    db_type = _db_models.ArgType.BYTES
+                    db_val = repr(a['value'])[2:-1] # turn b"\x00foo\x00" into \x00foo\x00
                 else:
-                    raise Exception("Unregonized Argument Type: " + str(a["type"]))
+                    raise Exception("Unrecognized Argument Type: " + str(a['type']))
                 
-                db_args.append(_db_models.SyscallArgument(name=a['name'], position=i, argument_type=db_type, value=str(a['value'])))
-            syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, arguments=db_args, execution_offset=execution_offset)
+                db_args.append(_db_models.SyscallArgument(name=a['name'], position=i, argument_type=db_type, value=db_val))
+            syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, retval=retval, arguments=db_args, execution_offset=execution_offset)
             s.add(syscall)
             s.commit()
             return _models.Syscall._from_db(syscall)

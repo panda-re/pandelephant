@@ -321,6 +321,9 @@ class Syscall(BaseModel):
                 arg['type'] = 'pointer'
                 arg['value'] = int(a.value, 16) # XXX: stored as a hex string
 
+            elif a.argument_type == _db_models.ArgType.BYTES:
+                arg['value'] = a.value # DB-safe value
+                arg['type'] = 'bytes'
             else:
                 arg['value'] = int(a.value) # Stored as a dec string
 

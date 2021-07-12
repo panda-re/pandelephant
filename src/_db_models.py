@@ -216,6 +216,7 @@ class Syscall(Base):
     type = Column(String(20))
     
     name = Column(String)
+    retval = Column(Integer)
     arguments = relationship("SyscallArgument", back_populates="syscall", order_by="SyscallArgument.position")  
 
     # this is the thread that made the call
@@ -239,6 +240,7 @@ class ArgType(enum.Enum):
     SIGNED_32 = 6
     UNSIGNED_16 = 7
     SIGNED_16 = 8
+    BYTES = 9
 
 class SyscallArgument(Base):
     __tablename__ = "syscall_arguments"
