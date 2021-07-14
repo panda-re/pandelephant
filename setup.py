@@ -4,7 +4,8 @@ with open("README.md", "r") as readme:
     long_description = readme.read()
 
 setuptools.setup(
-    name="pandelephant", # Replace with your own username
+    name="pandelephant",
+    setup_requires=['protobuf_distutils'],
     version="0.0.1",
     author="",
     author_email="",
@@ -17,6 +18,13 @@ setuptools.setup(
     python_requires='>=3.6',
     install_requires=['sqlalchemy'],
     extras_require={
-        'postgres': ["psycopg2"]
-    }
+        'postgres': ["psycopg2-binary"]
+    },
+    options={
+        'generate_py_protobufs': {
+            'source_dir':        'protos',
+            'output_dir':        'src',  # default '.'
+            'proto_files':       ['protos/models.proto'],
+        },
+    },
 )

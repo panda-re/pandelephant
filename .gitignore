@@ -247,3 +247,5 @@ dmypy.json
 ### Vim ###
 #
 .*.sw*
+
+models_pb2.py

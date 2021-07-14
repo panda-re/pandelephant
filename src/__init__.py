@@ -1,1 +1,1 @@
-__all__ = ['pandelephant']
+from .api import *

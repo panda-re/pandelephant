@@ -3,19 +3,27 @@ from datetime import datetime, timedelta
 import argparse
 import sys
 import time
+import os
+import collections
 
 # Assumes you've installed pandelephant package with setup.py
-import pandelephant.pandelephant as pe
+import pandelephant
+
+# PLogReader from pandare package is easiest to import,
+# but if it's unavailable, fallback to searching PYTHONPATH
+# which users should add panda/panda/scripts to
+try:
+#            from pandare.plog_reader import PLogReader
+    sys.path.append(os.environ['LEET_PANDA_SCRIPTS_DIR'])
+    from plog_reader import PLogReader
+except ImportError:
+    import PLogReader
 
 """
 USAGE: plog_to_pandelephant.py db_url plog
 """
 
-debug = True
-
-#NN = 2000000
-NN = 20000000000
-
+DEBUG_VERBOSE = False
 
 # HasField will raise an exception if that isnt a possible field name
 # so this version translates that into a False
@@ -28,68 +36,18 @@ def hasfield(msg, field_name):
     except:
         return False
 
+CollectedThread = collections.namedtuple('CollectedThread', ['ProcessId', 'ParentProcessId', 'ThreadId', 'CreateTime'])
+CollectedProcess = collections.namedtuple('CollectedProcess', ['ProcessId', 'ParentProcessId'])
+CollectedThreadSlice = collections.namedtuple('CollectedThreadSlice', ['FirstInstructionCount', 'LastInstructionCount', 'Thread'])
+CollectedMappingSlice = collections.namedtuple('CollectedMappingSlice', ['InstructionCount', 'AddressSpaceId', 'Mappings'])
+CollectedMapping = collections.namedtuple('CollectedMapping', ['Name', 'File', 'BaseAddress', 'Size'])
+BetterCollectedMapping = collections.namedtuple('BetterCollectedMapping', ['AddressSpaceId', 'Process', 'Name', 'File', 'BaseAddress', 'Size'])
+CollectedCodePoint = collections.namedtuple('CollectedCodePoint', ['Mapping', 'Offset'])
+CollectedSyscall = collections.namedtuple('CollectedSyscall', ['Name', 'Thread', 'InstructionCount', 'Arguments'])
+CollectedSyscallArgument = collections.namedtuple('CollectedSyscallArgument', ['Type', 'Value'])
+CollectedTaintFlow = collections.namedtuple('CollectedTaintFlow', ['IsStore', 'SourceCodePoint', 'SourceThread', 'SourceInstructionCount', 'SinkCodePoint', 'SinkThread', 'SinkInstructionCount'])
 
-class Process:
-
-    def __init__(self, pid, create_time, names, asids, tids):
-        self.pid = al.pid
-        self.create_time = create_time
-        self.names = names
-        self.asids = asids
-        self.tids = tids
-
-    def __repr__(self):
-        return ("Process(names=[%s],pid=%d,asid=0x%x,create_time=%s)" % (self.names, self.pid, self.asid, str(self.create_time)))
-
-    def __hash__(self):
-        return (hash(self.__repr__()))
-
-    def __cmp__(self, other):
-        return(cmp(self.__repr__(), other.__repr__()))
-
-
-def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLogReader=None):
-
-    if not PLogReader:
-        # This is a terrible hack. If the caller has a plog object, we need to use
-        # it instead of re-importing to avoid a segfault :(
-        # Otherwise we import it either from pandare package or scripts directory
-        # I'm sorry -af.
-
-        # PLogReader from pandare package is easiest to import,
-        # but if it's unavailable, fallback to searching PYTHONPATH
-        # which users should add panda/panda/scripts to
-        try:
-#            from pandare.plog_reader import PLogReader
-            sys.path.append("/home/tleek/git/panda-leet/panda/scripts")
-            from plog_reader import PLogReader
-        except ImportError:
-            import PLogReader
-
-    start_time = time.time()
-    pe.init(db_url)
-#    pe.init(db_url)
-
-    s = pe.Session()
-
-    execution_start_datetime = datetime.now()
-    dbq = s.query(pe.Execution).filter(pe.Execution.name == exec_name)
-    if dbq.count() == 0:
-        try:
-            db_execution = pe.Execution(name=exec_name, start_time=execution_start_datetime) # int(exec_start), end_time=int(exec_end))
-            s.add(db_execution)
-        except Exception as e:
-            print(str(e))
-    else:
-        assert (dbq.count() == 1)
-        db_execution = dbq.one()
-
-    procs = {}
-
-    pts = set([])
-
-    # 1st pass over plog to get set of threads and processes.
-    #
+def CollectThreadsAndProcesses(pandalog):
     # Why don't we just gather these on the fly? 
     # Because there are multiple sources for this information
     # and they have to be reconciled. 
@@ -103,472 +61,373 @@ def plog_to_pe(pandalog,  db_url, exec_name, exec_start=None, exec_end=None, PLo
     #  s.t. we could obtain proc/thread. 
 
     # thread is (pid, ppid, tid, create_time)
-    threads = set([])
     # process is (pid, ppid)
-    processes = set([])
-    def collect_thread(pid, ppid, tid, create_time):
-        thread = (pid, ppid, tid, create_time)
+    processes = set()
+    threads = set()
+    thread_slices = set()
+    thread_names = {}
+    def CollectFrom_asid_libraries(msg):
+        thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time)
+        # there might be several names for a tid
+        if thread in thread_names.keys():
+            thread_names[thread].add(msg.proc_name)
+        else:
+            thread_names[thread] = set([msg.proc_name])
         threads.add(thread)
-        process = (pid, ppid)
-        processes.add(process)
+        processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
+    def CollectFrom_asid_info(msg):
+        for tid in msg.tids:
+            thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=tid, CreateTime=msg.create_time)
+            if thread in thread_names.keys():
+                for name in msg.names:
+                    thread_names[thread].add(name)
+            else:
+                thread_names[thread] = set(msg.names)
+            threads.add(thread)
+            thread_slices.add(CollectedThreadSlice(FirstInstructionCount=msg.start_instr, LastInstructionCount=msg.end_instr, Thread=thread))
+        processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
+    def CollectFrom_taint_flow(msg):
+        source_thread = msg.source.cp.thread
+        threads.add(CollectedThread(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid, ThreadId=source_thread.tid, CreateTime=source_thread.create_time))
+        processes.add(CollectedProcess(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid))
+        sink_thread = msg.sink.cp.thread
+        threads.add(CollectedThread(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid, ThreadId=sink_thread.tid, CreateTime=sink_thread.create_time))
+        processes.add(CollectedProcess(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid))
+    def CollectFrom_syscall(msg):
+        threads.add(CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time))
+        processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
 
-    def collect_thread1(msg):
-        collect_thread(msg.pid, msg.ppid, msg.tid, msg.create_time)
+    CollectFrom = {
+        'asid_libraries': CollectFrom_asid_libraries,
+        'asid_info': CollectFrom_asid_info,
+        'taint_flow': CollectFrom_taint_flow,
+        'syscall': CollectFrom_syscall,
+    }
 
-    print("First pass over plog...")
-    t1 = time.time()
-    nal = 0
-    nalb = 0
+    AttemptCounts = { k: 0 for k in CollectFrom.keys() }
+    FailCounts = { k: 0 for k in CollectFrom.keys() }
     with PLogReader(pandalog) as plr:
-        ii = 0
-        for i, msg in enumerate(plr):
-            ii += 1
-            if (ii == NN):
-                print("early exit..")
-                break
-            # asid_libraries and asid_info are required
-            if msg.HasField("asid_libraries"):
-                nal += 1
-                al = msg.asid_libraries
-                try:
-                    collect_thread1(al)
-                except:
-                    nalb += 1
-                    pass
-            if msg.HasField("asid_info"):
-                ai = msg.asid_info
-                for tid in ai.tids:
-                    collect_thread(ai.pid, ai.ppid, tid, ai.create_time)
-            # these two fields are not required
-            if hasfield(msg, "taint_flow"):
-                collect_thread1(msg.taint_flow.source.cp.thread)
-                collect_thread1(msg.taint_flow.sink.cp.thread)
-            if hasfield(msg, "syscall"):
-                collect_thread1(msg.syscall)
+        for msg in plr:
+            for k in CollectFrom.keys():
+                if hasfield(msg, k):
+                    AttemptCounts[k] += 1
+                    try:
+                        CollectFrom[k](getattr(msg, k))
+                    except:
+                        FailCounts[k] += 1
+                        pass
+                    break
+    print('Gathered {} Processes and {} Threads'.format(len(processes), len(threads)))
+    for k in CollectFrom.keys():
+        print('\t{} Attempts: {}, Failures: {}'.format(k, AttemptCounts[k], FailCounts[k]))
+    return processes, threads, thread_names, thread_slices
 
-
-    print ("nal = %d nalb = %d" % (nal, nalb))
-    t2 = time.time()
-    print ("%.2f sec for 1st pass" % (t2-t1))
-
+def AssociateThreadsAndProcesses(processes, threads, thread_names):
     # associate threads and procs
-    thread2proc = {} # Key: thread (tid, create_time). Value: process (pid, ppid)
-    proc2threads = {} # Key: (pid, ppid). Value: set((tid, create_time), ...)
+    thread2proc = { thread: CollectedProcess(ProcessId=thread.ProcessId, ParentProcessId=thread.ParentProcessId) for thread in threads }
+    proc2threads = { proc: set() for proc in processes }
     newthreads = set([]) # All threads observed
+    DuplicateCheck = set((thread.ThreadId, thread.CreateTime) for thread in threads)
     for thread in threads:
-        (pid, ppid, tid, create_time) = thread
-        proc = (pid, ppid)
-        if not (proc in proc2threads):
-            proc2threads[proc] = set([])
-        th = (tid,create_time)
-        newthreads.add(th)
-        proc2threads[proc].add(th)
-        if th in thread2proc:
-            #assert proc == thread2proc[th]
-            if proc != thread2proc[th]:
-                print("WARNING two processes for the same thread:", proc, thread2proc[th])
-        thread2proc[th] = proc
-    threads = newthreads
-
-    for th in thread2proc.keys():
-        print ("thread: (tid=%d, create_time=%d)" % th)
-        print (" -- proc (pid=%d, ppid=%d)" % thread2proc[th])
+        proc2threads[(thread.ProcessId, thread.ParentProcessId)].add(thread)
+    if len(DuplicateCheck) != len(thread2proc.keys()):
+        raise Exception("Threads are not unique in (ThreadId, CreateTime)... If you think this should be ingestable, change this line...")
 
     for proc in proc2threads.keys():
-        print ("proc (pid=%d, ppid=%d)" % proc)
-        for th in proc2threads[proc]:
-            print (" -- thread: (tid=%d, create_time=%d)" % th)
+        print('Process (ProcessId {} ParentProcessId {}) has {} Threads'.format(proc.ProcessId, proc.ParentProcessId, len(proc2threads[proc])))
+        for thread in proc2threads[proc]:
+            print('\tThread (ThreadId {} CreateTime {:#x}) names: {}'.format(thread.ThreadId, thread.CreateTime, thread_names[thread]))
 
+    return proc2threads, thread2proc
 
+def CollectProcessMemoryMappings(pandalog, processes):
     # 2nd pass over plog 
     # 
     # This time to get mappings for processes 
-    # and names for each tid
 
-    # Note. mappings[process] is sequence of mappings we saw for that process
-    # each element in this array is a triple (instrcount, asid, m)
-    # where m is the array of mappings observed at that instruction count
-    mappings = {}
+    CollectedBetterMappings = set()
+    CollectedBetterMappingRanges = { proc: { } for proc in processes }
 
-    tid_names = {}
-    tids = {}
-    num_discard = 0
-    num_keep = 0
-    num_mappings = 0
     num_no_mappings = 0
-    xmllint = set([])
-    libxml = set([])
-    print("2nd pass over plog...")
-    t1 = time.time()
+    def CollectFrom_asid_libraries(entry, msg):
+        nonlocal num_no_mappings
+        if (msg.pid == 0) or (msg.ppid == 0) or (msg.tid == 0):
+            num_no_mappings += 1
+            return
+        thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time)
+        process = CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid)
+        # mappings in this plog entry
+        for mapping in msg.modules:
+            better_mapping = BetterCollectedMapping(AddressSpaceId=entry.asid, Name=mapping.name, File=mapping.file, BaseAddress=mapping.base_addr, Size=mapping.size, Process=process)
+            CollectedBetterMappings.add(better_mapping)
+            if better_mapping in CollectedBetterMappingRanges[process].keys():
+                FirstInstructionCount, LastInstructionCount = CollectedBetterMappingRanges[process][better_mapping]
+                if entry.instr < FirstInstructionCount:
+                    CollectedBetterMappingRanges[process][better_mapping] = (entry.instr, LastInstructionCount)
+                elif entry.instr > LastInstructionCount:
+                    CollectedBetterMappingRanges[process][better_mapping] = (FirstInstructionCount, entry.instr)
+            else:
+                CollectedBetterMappingRanges[process][better_mapping] = (entry.instr, entry.instr)
+
+    CollectFrom = {
+        'asid_libraries': CollectFrom_asid_libraries,
+    }
+    AttemptCounts = { k: 0 for k in CollectFrom.keys() }
+    FailCounts = { k: 0 for k in CollectFrom.keys() }
     with PLogReader(pandalog) as plr:
-        ii = 0 
-        for i, msg in enumerate(plr):
-            ii += 1
-            if (ii == NN): break
-            # this msg is the output of loaded_libs plugin
-            if msg.HasField("asid_libraries") and (len(msg.asid_libraries.ListFields()) > 0):
-                al = msg.asid_libraries
-                if (al.pid == 0) or (al.ppid == 0) or (al.tid == 0):
-                    these_mappings = None
-                    num_no_mappings += 1
-                    continue
-                thread = (al.tid, al.create_time)
-                process = (al.pid, al.ppid)
-                # mappings in this plog entry
-                these_mappings = []
-                for mapping in al.modules:
-                    mp = (mapping.name, mapping.file, mapping.base_addr, mapping.size)
-                    if "xmllint" in mapping.name:
-                        xmllint.add(mp)
-                    if "libxml" in mapping.name:
-                        libxml.add(mp)
-                    these_mappings.append(mp)
-                num_mappings += 1
-                # collect mappings for this process, which
-                # are bundled with instr count and asid
-                # which we need to interpret base_addr
-                if not (process in mappings):
-                    mappings[process] = [(msg.instr, msg.asid, these_mappings)]
-                else:
-                    (x,last_asid,last_mappings) = mappings[process][-1]
-                    if these_mappings == last_mappings and msg.asid == last_asid:
-                        num_discard += 1
-                    else:
-                        mappings[process].append((msg.instr,msg.asid,these_mappings))
-                        num_keep += 1
-                thread2proc[thread] = process
-                # there might be several names for a tid
-                if not (thread in tid_names):
-                    tid_names[thread] = set([])
-                if not (process in tids):
-                    tids[process] = set([])
-                tid_names[thread].add(al.proc_name)
-                tids[process].add(al.tid)
+        for msg in plr:
+            for k in CollectFrom.keys():
+                if hasfield(msg, k):
+                    AttemptCounts[k] += 1
+                    try:
+                        CollectFrom[k](msg, getattr(msg, k))
+                    except:
+                        FailCounts[k] += 1
+                        pass
+                    break
+    print('Processed {} messages ({} without mapping)'.format(sum(AttemptCounts[k] for k in AttemptCounts.keys()), num_no_mappings))
+    for k in CollectFrom.keys():
+        print('\t{} Attempts: {}, Failures: {}'.format(k, AttemptCounts[k], FailCounts[k]))
+    print('CollectedBetterMappingRanges Len {}'.format(sum(len(procmaps.keys()) for procmaps in CollectedBetterMappingRanges.values())))
+    return CollectedBetterMappingRanges
 
-            if msg.HasField("asid_info"):
-                ai = msg.asid_info
-                process = (ai.pid, ai.ppid)
-                if not (process in tids):
-                    tids[process] = set([])
-                for tid in ai.tids:
-                    tids[process].add(tid)
-                    thread = (tid, ai.create_time)
-                    if not (thread in tid_names):
-                        tid_names[thread] = set([])
-                    for name in ai.names:
-                        tid_names[thread].add(name)
-
-#   import pdb; pdb.set_trace()
-
-    t2 = time.time()
-    print ("%.2f sec for 2nd pass" % (t2-t1))
-
-    # NB: mappings is keyed on process. For each process, it provides a list of 
-    # the mappings observed at some instr count we can use this later when we 
-    # need a mapping for that process to find the one that makes sense
-    # temporally (since its instr count is just before that of the thing we 
-    # want to resolve).
-
-    print("Num mappings = %d" % num_mappings)
-    print("Num no_mappings = %d" % num_no_mappings)
-    print("Kept %d of %d mappings)" % (num_keep, (num_keep+num_discard)))
-    print("%d processes" % (len(processes)))
-    for process in processes:
-        print("proc %d %d" % process)        
-        for thread in proc2threads[process]:
-            (tid,create_time) = thread
-            tname = str(tid_names[thread]) if thread in tid_names else ""
-            print("  -- thread %d %d [%s]" % (tid, create_time, tname))
-        if process in mappings:
-            print("  -- %d mappings" % (len(mappings[process])))
-            for (instr,b,m) in mappings[process]:
-                print("    @ instr %d, %d mappings" % (instr, len(m)))
-#            for mpn in m:
-#                print ("  -- %s" % (str(mpn)))
+def ConvertTaintFlowsAndSyscallsToDatabase(datastore, CollectedSyscalls, CollectedTaintFlows, CollectedCodePoints, processes, CollectedThreadToDatabaseThread, CollectedMappingToDatabaseMapping):
+    CollectedCodePointToDatabaseCodePoint = {}
+    CollectedSyscallToDatabaseSyscall = {}
+    for s in CollectedSyscalls:
+        args = []
+        for a in s.Arguments:
+            args.append({'type': a.Type, 'value': a.Value})
+        CollectedSyscallToDatabaseSyscall[s] = datastore.add(CollectedThreadToDatabaseThread[s.Thread], s.Name, args, s.InstructionCount)
 
 
-    print("Constructing db objects for thread, process, and mapping")
+    for tf in CollectedTaintFlows:
+        src_thread = CollectedThreadToDatabaseThread[tf.SourceThread]
+        src_mapping = CollectedMappingToDatabaseMapping[tf.SourceCodePoint.Mapping]
+
+        sink_thread = CollectedThreadToDatabaseThread[tf.SinkThread]
+        sink_mapping = CollectedMappingToDatabaseMapping[tf.SinkCodePoint.Mapping]
+
+        CollectedCodePointToDatabaseCodePoint[tf] = datastore.new_taintflow(tf.IsStore, src_thread, src_mapping, tf.SourceCodePoint.Offset, tf.SourceInstructionCount, sink_thread, sink_mapping, tf.SinkCodePoint.Offset, tf.SinkInstructionCount)
+
+
+def CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges):
+    CollectedCodePoints = set()
+    CollectedSyscalls = set()
+    CollectedTaintFlows = set()
+    # DuplicateTaintFlows = {}
+    NoMappingCount = {
+        'Source': 0,
+        'Sink': 0,
+    }
+    def CollectFrom_syscall(entry, msg):
+        args = []
+        SyscallFieldInfo = {
+            'str': ('string',      '{:s}'),
+            'ptr': ('pointer',     '{:x}'),
+            'u64': ('unsigned64', '{:d}'),
+            'u32': ('unsigned32', '{:d}'),
+            'u16': ('unsigned16', '{:d}'),
+            'i64': ('signed64',   '{:d}'),
+            'i32': ('signed32',   '{:d}'),
+            'i16': ('signed16',   '{:d}'),
+        }
+        def syscall_arg_value(arg):
+            for fld, (typ, fmt) in SyscallFieldInfo.items():
+                if arg.HasField(fld):
+                    return typ, fmt.format(getattr(arg, fld))
+            assert(False)
+        thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time)
+        CollectedSyscalls.add(CollectedSyscall(
+            Name=msg.call_name,
+            Thread=thread,
+            InstructionCount=entry.instr,
+            Arguments=[
+                CollectedSyscallArgument(*syscall_arg_value(arg))
+                for arg in msg.args
+            ]
+        ))
+        return
+    def CollectFrom_taint_flow(entry, msg):
+        source_thread = msg.source.cp.thread
+        source_process = CollectedProcess(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid)
+        source_thread = CollectedThread(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid, ThreadId=source_thread.tid, CreateTime=source_thread.create_time)
+        sink_thread = msg.sink.cp.thread
+        sink_process = CollectedProcess(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid)
+        sink_thread = CollectedThread(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid, ThreadId=sink_thread.tid, CreateTime=sink_thread.create_time)
+
+        # REQUIRES: CollectedBetterMappingRanges[{source,sink}_process].items() is sorted by ascending FirstInstructionCount
+        sink_mapping_slice, sink_mapping, sink_offset = None, None, None
+        for mapping, (FirstInstructionCount, LastInstructionCount) in CollectedBetterMappingRanges[sink_process].items():
+            if (FirstInstructionCount <= msg.sink.instr) and (LastInstructionCount >= msg.sink.instr):
+                if (msg.sink.cp.pc >= mapping.BaseAddress) and (msg.sink.cp.pc <= (mapping.BaseAddress + mapping.Size - 1)):
+                    sink_mapping_slice = (FirstInstructionCount, LastInstructionCount)
+                    sink_mapping = mapping
+                    sink_offset = msg.sink.cp.pc - mapping.BaseAddress
+            else:
+                if not (sink_mapping is None):
+                    break
+
+        source_mapping_slice, source_mapping, source_offset = None, None, None
+        for mapping, (FirstInstructionCount, LastInstructionCount) in CollectedBetterMappingRanges[source_process].items():
+            if (FirstInstructionCount <= msg.source.instr) and (LastInstructionCount >= msg.source.instr):
+                if (msg.source.cp.pc >= mapping.BaseAddress) and (msg.source.cp.pc <= (mapping.BaseAddress + mapping.Size - 1)):
+                    source_mapping_slice = (FirstInstructionCount, LastInstructionCount)
+                    source_mapping = mapping
+                    source_offset = msg.source.cp.pc - mapping.BaseAddress
+            else:
+                if not (source_mapping is None):
+                    break
+        if sink_mapping is None:
+            NoMappingCount['Sink'] += 1
+        if source_mapping is None:
+            NoMappingCount['Source'] += 1
+        if (sink_mapping is None) or (source_mapping is None):
+            return
+
+        SourceCodePoint = CollectedCodePoint(Mapping=source_mapping, Offset=source_offset)
+        SinkCodePoint = CollectedCodePoint(Mapping=sink_mapping, Offset=sink_offset)
+        CollectedCodePoints.add(SourceCodePoint)
+        CollectedCodePoints.add(SinkCodePoint)
+        flow = CollectedTaintFlow(
+            IsStore=msg.source.is_store,
+            SourceCodePoint=SourceCodePoint, SourceThread=source_thread, SourceInstructionCount=msg.source.instr,
+            SinkCodePoint=SinkCodePoint, SinkThread=sink_thread, SinkInstructionCount=msg.sink.instr
+        )
+        # if flow in CollectedTaintFlows:
+        #     if flow in DuplicateTaintFlows.keys():
+        #         DuplicateTaintFlows[flow] += 1
+        #     else:
+        #         DuplicateTaintFlows[flow] = 2
+        CollectedTaintFlows.add(flow)
+        return
+    CollectFrom = {
+        'syscall': CollectFrom_syscall,
+        'taint_flow': CollectFrom_taint_flow,
+    }
+    AttemptCounts = { k: 0 for k in CollectFrom.keys() }
+    FailCounts = { k: 0 for k in CollectFrom.keys() }
+    with PLogReader(pandalog) as plr:
+        for msg in plr:
+            for k in CollectFrom.keys():
+                if hasfield(msg, k):
+                    AttemptCounts[k] += 1
+                    try:
+                        CollectFrom[k](msg, getattr(msg, k))
+                    except Exception as e:
+                        FailCounts[k] += 1
+                    break
+    for k in CollectFrom.keys():
+        print('\t{} Attempts: {}, Failures: {}'.format(k, AttemptCounts[k], FailCounts[k]))
+    print('\tNoMappingCount = {}'.format(NoMappingCount))
+    # print('\tDuplicate Flows {}'.format(len(DuplicateTaintFlows.keys())))
+    # for flow, count in DuplicateTaintFlows.items():
+    #     print('\t\tFlow Duplicated {} times: {}'.format(count, flow))
+    #     if (flow.SourceCodePoint.Mapping.Name == 'toy_debug') and (flow.SinkCodePoint.Mapping.Name == 'toy_debug'):
+    #         print('\t\t\tGhidra Flow Info: {:08x} -> {:08x}'.format(0x00100000 + flow.SourceCodePoint.Offset, 0x00100000 + flow.SinkCodePoint.Offset))
+    return CollectedTaintFlows, CollectedSyscalls, CollectedCodePoints
+
+def ConvertProcessThreadsMappingsToDatabase(datastore, execution, processes, threads, CollectedBetterMappingRanges, thread_names, proc2threads, thread_slices):
     # construct db process, and for each,
     # create associated threads and mappings and connect them up
-    db_sav_procs = {}
-    db_sav_threads = {}
-    db_sav_mappings = {}
-    for process in processes:
-#    for process in mappings.keys():
-        (pid,ppid) = process
-        if debug:
-            print("Creating db process pid-%d ppid=%d for execution" % process)
-        # why doesn't proc have a create_time?
-        # bc all its threads do and the thread with earliest
-        # create_time is create time of process, I think.
-        db_proc = pe.Process(pid=pid, ppid=ppid, execution=db_execution)
-        db_threads = []
-        for thread in proc2threads[process]:
-            (tid, thread_create_time) = thread
-            tnames = list(tid_names[thread]) if thread in tid_names else []
-            db_thread = pe.Thread(names=tnames, tid=tid, \
-                                  create_time = thread_create_time)
-            db_threads.append(db_thread)
-            db_sav_threads[thread] = db_thread
-            if debug:
-                print("** Creating thread for that process names=[%s] tid=%d create_time=%d" % \
-                       (tnames, tid, thread_create_time))
-        db_proc.threads = db_threads
-        if (process in mappings):
-            db_proc.mappings = []
-#            db_mappings = []
-            for (instr,asid,one_mappings) in mappings[process]: # mapping_list:
-                for mapping in one_mappings:
-                    (m_name, m_file, m_base, m_size) = mapping
-                    db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=m_base, execution=db_execution)
-                    if debug:
-                        print("** Creating virtual addr for base for module in that process asid=%x base=%x instr=%d" % \
-                               (asid, m_base, instr))
-                    db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
-                    if debug:
-                        print("** Creating mapping for that process name=%s path=%s base=that virtual addr size=%d" % \
-                               (m_name, m_file, m_size))
-                    db_proc.mappings.append(db_mapping)
-#            db_proc.mappings = db_mappings
-        db_sav_procs[process] = db_proc
-        s.add(db_proc)
+    CollectedProcessToDatabaseProcess = {}
+    CollectedThreadToDatabaseThread = {}
+    CollectedMappingToDatabaseMapping = {}
+    for p in processes:
+        # Setting process create time to earliest thread. I think this is wrong.
+        create_time = sys.maxsize
+        for t in proc2threads[p]:
+            if t.CreateTime < create_time:
+                create_time = t.CreateTime
+        process = datastore.new_process(execution, create_time, p.ProcessId, p.ParentProcessId)
+        CollectedProcessToDatabaseProcess[p] = process
 
-    s.commit()
-    print ("committed")
+        for t in proc2threads[p]:
+            CollectedThreadToDatabaseThread[t] = datastore.new_thread(process, t.CreateTime, t.ThreadId, thread_names[t])
+        
+        for mapping, (FirstInstructionCount, LastInstructionCount) in CollectedBetterMappingRanges[p].items():
+            CollectedMappingToDatabaseMapping[mapping] = datastore.new_mapping(process, mapping.Name, mapping.File, mapping.AddressSpaceId, mapping.BaseAddress, FirstInstructionCount, mapping.Size, FirstInstructionCount, LastInstructionCount)
 
+    for thread_slice in thread_slices:
+        datastore.new_threadslice(CollectedThreadToDatabaseThread[thread_slice.Thread], thread_slice.FirstInstructionCount, end_execution_offset=thread_slice.LastInstructionCount)
 
-    # find mapping that corresponds best to this code point
-    # at this instr count
-    # that is, we have a temporal sequence of mappings for the process this thread is part of.
-    # we want the mapping that makes most sense given this srcsink which also has an instruction count
-    # so we search for mappings for that process that is most immediately prior to instr count
-    # for the srcsink
-    def get_module_offset(srcsink):
-        cp = srcsink.cp
-        thread = (cp.thread.tid, cp.thread.create_time)
-        if not (thread in thread2proc):
-            return None
-        process = thread2proc[thread]
-        retv = None
-        for db_mapping in db_sav_procs[process].mappings:
-            #  db_mapping = pe.Mapping(name=m_name, path=m_file, base=db_va, size=m_size)
-            instr = db_mapping.base.execution_offset
-            if instr <= srcsink.instr:
-                base = db_mapping.base.address
-                size = db_mapping.size 
-                if cp.pc >= base and cp.pc <= (base+size-1):
-                    retv = (db_mapping, cp.pc - base)
-        return retv
-                    
+    return CollectedProcessToDatabaseProcess, CollectedThreadToDatabaseThread, CollectedMappingToDatabaseMapping
 
+def CreateExecutionIfNeeded(datastore, exec_name):
+    matching_execution = datastore.get_execution_by_name(exec_name)
+    if matching_execution is None:
+        matching_execution = datastore.new_execution(exec_name)
+    return matching_execution
 
-    # find db rows for process and thread indicated, if its there.
-    def get_db_process_thread(db_execution, thr):
-        thread = (thr.tid, thr.create_time)
-        if not (thread in db_sav_threads):
-            return None
-        db_thread = db_sav_threads[thread]
-        if not (thread in thread2proc):
-            return None
-        process = thread2proc[thread]
-        if not (process in db_sav_procs):
-            return None
-        return (db_sav_procs[process], db_thread)
+def plog_to_pe(pandalog,  db_url, exec_name):
+    start_time = time.time()
+    ds = pandelephant.PandaDatastore(db_url)
 
+    execution = CreateExecutionIfNeeded(datastore=ds, exec_name=exec_name)
 
-    def get_db_mapping(execution, db_process, asid, instr, mapping):
-        (name, filename, base, size) = mapping
-        # since instr is of a read/write, we need to *create* this va
-        # as there's no reason to expect it will already be in the db
-        db_va = pe.VirtualAddress(asid=asid, execution_offset=instr, address=base, execution=execution)
-        # ditto since this mapping uses a virt address indexed to an instr,
-        # we dont imagine it will already be there. so create.
-        db_mapping = pe.Mapping(name=name, path=filename, base=db_va, size=size)
-        # and we need to make sure mapping is assocated with our process, right?
-        db_proc.mappings.append(db_mapping)
-        return db_mapping
-
-
-
-    print("3rd pass over plog -- reading flows and syscalls")
-    # another pass over the plog to
-    # read Flows from tsm and transform them
-    # into module/offset
-    instr_inc = 10000
-    next_instr = instr_inc
-    num_taint_flows = 0
-    code_points = set([])
+    print("First pass over plog (Gathering Processes and Threads)...")
     t1 = time.time()
-    with PLogReader(pandalog) as plr:
-        ii = 0 
-        for i, msg in enumerate(plr):
-            ii += 1
-            if (ii == NN): break
-            if msg.instr > next_instr:
-                print("time=%.2f sec: Hit instr=%d" % (time.time() - start_time, next_instr))
-                if num_taint_flows > 0:
-                    print ("num_taint_flow=%d " % num_taint_flows)
-                next_instr += instr_inc
-
-            if msg.HasField("asid_info"):
-                ai = msg.asid_info
-                for tid in ai.tids:
-                    thread = (tid, ai.create_time)
-                    assert (thread in db_sav_threads)
-                    db_thread = db_sav_threads[thread]
-                    db_thread_slice \
-                        = pe.ThreadSlice(thread=db_thread, \
-                                         start_execution_offset=ai.start_instr, \
-                                         end_execution_offset=ai.end_instr)
-                    s.add(db_thread_slice)
-
-            # syscall field not *required* 
-            if hasfield(msg, "syscall"):
-
-                def syscall_value(a, scarg):
-                    if scarg.HasField("str"):
-                        a.argument_type = pe.ArgType.STRING
-                        a.value = ("%s" % scarg.str)
-                        return
-                    if scarg.HasField("ptr"):
-                        a.argument_type = pe.ArgType.POINTER
-                        a.value = ("%x" % scarg.ptr)
-                        return
-                    if scarg.HasField("u64"):
-                        a.argument_type = pe.ArgType.UNSIGNED_64
-                        a.value = ("%d" % scarg.u64)
-                        return
-                    if scarg.HasField("u32"):
-                        a.argument_type = pe.ArgType.UNSIGNED_32
-                        a.value = ("%d" % scarg.u32)
-                        return
-                    if scarg.HasField("u16"):
-                        a.argument_type = pe.ArgType.UNSIGNED_16
-                        a.value = ("%d" % scarg.u16)
-                        return
-                    if scarg.HasField("i64"):
-                        a.argument_type = pe.ArgType.SIGNED_64
-                        a.value = ("%d" % scarg.i64)
-                        return
-                    if scarg.HasField("i32"):
-                        a.argument_type = pe.ArgType.SIGNED_32
-                        a.value = ("%d" % scarg.i32)
-                        return
-                    if scarg.HasField("i16"):
-                        a.argument_type = pe.ArgType.SIGNED_16
-                        a.value = ("%d" % scarg.i16)
-                        return
-
-                sc = msg.syscall
-                thread = (sc.tid, sc.create_time)
-                assert (thread in db_sav_threads)
-                db_thread = db_sav_threads[thread]
-
-
-                db_syscall = pe.Syscall(name=sc.call_name, thread=db_thread, execution_offset=msg.instr)
-                s.add(db_syscall)
-                i = 1
-                for sc_arg in sc.args:
-                    a = pe.SyscallArgument(syscall=db_syscall, position=i)
-                    syscall_value(a, sc_arg)
-                    s.add(a)
-                    i += 1
-
-
-            if hasfield(msg, "taint_flow"):
-
-                tf = msg.taint_flow
-
-                pt = get_db_process_thread(db_execution, tf.source.cp.thread)
-                if pt is None:
-                    continue
-                (db_source_process, db_source_thread) = pt
-                pt = get_db_process_thread(db_execution, tf.sink.cp.thread)
-                if pt is None:
-                    continue
-                (db_sink_process, db_sink_thread) = pt
-
-
-
-                source_mo = get_module_offset(tf.source)
-                sink_mo = get_module_offset(tf.sink)
-                if (source_mo is None) or (sink_mo is None):
-                    continue
-
-
-
-                (db_source_mapping, source_offset) = source_mo
-                (db_sink_mapping, sink_offset) = sink_mo
-
-
-#                db_source_mapping = get_db_mapping(db_execution, db_source_process, msg.asid, source_mapping_instr, source_mapping)
-#                db_sink_mapping = get_db_mapping(db_execution, db_sink_process, msg.asid, sink_mapping_instr, sink_mapping)
-                
-#                p_source = (db_source_mapping, source_offset)
-#                p_sink = (db_sink_mapping, sink_offset)
-                                
-                db_source_code_point = pe.CodePoint(mapping=db_source_mapping, offset=source_offset)
-                db_sink_code_point = pe.CodePoint(mapping=db_sink_mapping, offset=sink_offset)
-                
- #               code_points.add(p_source)
-#                code_points.add(p_sink)
-                
-                db_taint_flow = pe.TaintFlow(
-                    source_is_store = tf.source.is_store, \
-                    source = db_source_code_point, \
-                    source_thread = db_source_thread, \
-                    source_execution_offset = tf.source.instr, \
-                    sink = db_sink_code_point, \
-                    sink_thread = db_sink_thread, \
-                    sink_execution_offset = tf.sink.instr)
-                
-                s.add(db_taint_flow)
-                num_taint_flows += 1
-
-    print("db commit...")
-    t_pre_commit = time.time()
-    s.commit()
+    processes, threads, thread_names, thread_slices = CollectThreadsAndProcesses(pandalog)
     t2 = time.time()
-    print ("time to commit: %.2f sec" % (t2 - t_pre_commit))
+    print ("{:.2f} sec for 1st pass".format(t2 - t1))
+
+    print('Associating Threads and Processes...')
+    t3 = time.time()
+    proc2threads, thread2proc = AssociateThreadsAndProcesses(processes, threads, thread_names)
+    t4 = time.time()
+    print ("{:.2f} sec for association".format(t4 - t3))
+
+    print("Second pass over plog (Gathering Process Mappings)...")
+    t5 = time.time()
+    # mappings, CollectedBetterMappingRanges = CollectProcessMemoryMappings(pandalog, processes)
+    CollectedBetterMappingRanges = CollectProcessMemoryMappings(pandalog, processes)
+    t6 = time.time()
+    print ("{:.2f} sec for mapping gathering".format(t6 - t5))
+
+    print('Got {} BetterMappings...'.format(sum(len(procmaps.keys()) for procmaps in CollectedBetterMappingRanges.values())))
+    for proc in processes:
+        print('\tProcess (ProcessId {} ParentProcessId {}) has {} Threads {} Mappings'.format(proc.ProcessId, proc.ParentProcessId, len(proc2threads[proc]), len(CollectedBetterMappingRanges[proc].keys())))
+        for mapping, (FirstInstructionCount, LastInstructionCount) in CollectedBetterMappingRanges[proc].items():
+            print('\t\tFrom Instruction {} - {} in Address Space {:#x} Mapping {} File {} BaseAddress {:#x} Size {:#x}'.format(
+                FirstInstructionCount,
+                LastInstructionCount,
+                mapping.AddressSpaceId,
+                mapping.Name,
+                mapping.File,
+                mapping.BaseAddress,
+                mapping.Size
+            ))
+
+    print('Third pass over plog (Gathering Taint Flows and Syscalls)...')
+    t7 = time.time()
+    CollectedTaintFlows, CollectedSyscalls, CollectedCodePoints = CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges)
+    t8 = time.time()
+    print('{:.2f} sec to collect Taint Flows and Syscalls...'.format(t8 - t7))
+    print('Collected {} Taint Flows {} Syscalls {} Code Points'.format(len(CollectedTaintFlows), len(CollectedSyscalls), len(CollectedCodePoints)))
+
+    print("Constructing db objects for thread, process, and mapping")
+    t9 = time.time()
+    CollectedProcessToDatabaseProcess, CollectedThreadToDatabaseThread, CollectedMappingToDatabaseMapping = ConvertProcessThreadsMappingsToDatabase(ds, execution, processes, threads, CollectedBetterMappingRanges, thread_names, proc2threads, thread_slices)
+    t10 = time.time()
+    print ("{:.2f} sec for db objects creation".format(t10 - t9))
+
+    print("Constructing db objects for Taint Flows, Syscalls, and CodePoints")
+    t11 = time.time()
+    ConvertTaintFlowsAndSyscallsToDatabase(ds, CollectedSyscalls, CollectedTaintFlows, CollectedCodePoints, processes, CollectedThreadToDatabaseThread, CollectedMappingToDatabaseMapping)
+    t12 = time.time()
+    print ("{:.2f} sec for db objects create/commit".format(t12 - t11))
+
 
     print("final time: %.2f sec" % (time.time() - start_time))
-
-
-    
-    print ("%.2f sec for 3rd pass" % (t2-t1))
-
-    print ("num_taint_flows = %d" % num_taint_flows)
-
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ingest pandalog and tranfer results to pandelephant")
     parser.add_argument("-db_url", help="db url", action="store", required=True)
     parser.add_argument("-pandalog", help="pandalog", action="store", required=True)
-    parser.add_argument("-exec_start", "--exec-start", help="Start time for execution", action="store", default=None)
-    parser.add_argument("-exec_end", "--exec-end", help="End time for execution", action="store", default=None)
-
-    # must have this
     parser.add_argument("-exec_name", "--exec-name", help="A name for the execution", action="store", required=True)
 
     args = parser.parse_args()
 
-##    db_url = "postgres://tleek:tleek123@localhost/pandelephant1"
-##    if database_exists(db_url):
-##        drop_database(db_url)
-##    create_database(db_url)
-##    pe.init("postgres://tleek:tleek123@localhost/pandelephant1")
-##    db = pe.create_session("postgres://tleek:tleek123@localhost/pandelephant1")
-
-#    exec_name="lots" 
-#    db_url="postgres://tleek:tleek123@localhost/pandelephant1"
-#    pandalog="/home/tleek/git/panda-leet/tsm/slash-tsm.plog-tcn-100"
-#    pandalog="/home/tleek/toy/_home_tleek_toy_toy_debug.plog"
-
     print("%s %s" % (args.db_url, args.exec_name))
-    plog_to_pe(args.pandalog, args.db_url, args.exec_name, args.exec_start, args.exec_end)
-
-#    plog_to_pe(pandalog, db_url, exec_name, None, None)
-
-
-#PYTHONPATH=/home/tleek/git/panda/panda/scripts python3 ./scripts/plog_to_pandelephant.py -pandalog ~/git/panda/build/foo.plog -exec_name test -db_url postgres://tleek:tleek123@localhost/pandelephant
+    plog_to_pe(args.pandalog, args.db_url, args.exec_name)

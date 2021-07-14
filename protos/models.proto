@@ -1,0 +1,106 @@
+syntax = "proto3";
+message Execution {
+    string uuid = 1;
+    string name = 2;
+    repeated string process_uuids = 3;
+    string description = 4;
+}
+
+message Recording {
+    Execution execution = 1;
+    string prefix = 2;
+    uint64 instruction_count = 3;
+    bytes log_hash = 4;
+    bytes snapshot_hash = 5;
+    bytes qcow_hash = 6;
+}
+
+message Process {
+    string uuid = 1;
+    string execution_uuid = 2;
+    uint64 create_time = 3;
+    uint64 pid = 4;
+    uint64 ppid = 5;
+    repeated string thread_uuids = 6;
+    repeated string mapping_uuids = 7;
+}
+
+message Thread {
+    string uuid = 1;
+    string process_uuid = 2;
+    uint64 create_time = 3;
+    uint64 tid = 4;
+    repeated string names = 5;
+}
+
+message Mapping {
+    string uuid = 1;
+    string process_uuid = 2;
+    string name = 3;
+    string path = 4;
+    string base_uuid = 5;
+    uint64 size = 6;
+    uint64 first_seen_execution_offset = 7;
+    uint64 last_seen_execution_offset = 8;
+}
+
+message VirtualAddress {
+    string uuid = 1;
+    string execution_uuid = 2;
+    uint64 asid = 3;
+    uint64 execution_offset = 4;
+    uint64 address = 5;
+}
+
+message CodePoint {
+    string uuid = 1;
+    string mapping_uuid = 2;
+    uint64 offset = 3;
+}
+
+message TaintFlow {
+    string uuid = 1;
+    bool is_store = 2;
+    string source_code_point_uuid = 3;
+    string source_thread_uuid = 4;
+    uint64 source_execution_offset = 5;
+    string sink_code_point_uuid = 6;
+    string sink_thread_uuid = 7;
+    uint64 sink_execution_offset = 8;
+}
+
+message ThreadSlice {
+    string uuid = 1;
+    string thread_uuid = 2;
+    uint64 start_execution_offset = 3;
+    uint64 end_execution_offset = 4;
+}
+
+  enum ArgumentType {
+    STRING = 0;
+    POINTER = 1;
+    UNSIGNED_64 = 2;
+    SIGNED_64 = 3;
+    UNSIGNED_32 = 4;
+    SIGNED_32 = 5;
+    UNSIGNED_16 = 6;
+    SIGNED_16 = 7;
+  }
+
+message SyscallArgument {
+    string name = 1;
+    ArgumentType type = 2;
+    bool pointer = 3;
+    oneof value {
+        string string_value = 4;
+        uint64 number_value = 5;
+  }
+}
+
+message Syscall {
+    string uuid = 1;
+    string name = 2;
+    repeated SyscallArgument arguments = 3;
+    string thread_uuid = 4;
+    uint64 execution_offset = 5;
+}
