@@ -301,12 +301,13 @@ class ThreadSlice(BaseModel):
         return pb.ThreadSlice(uuid=str(self.uuid()), thread_uuid=str(self.thread_uuid()), start_execution_offset=self.start_execution_offset(), end_execution_offset=self.end_execution_offset())
 
 class Syscall(BaseModel):
-    def __init__(self, uuid: uuid.UUID, thread_uuid: uuid.UUID, name: str, arguments: List[Dict[str, Union[str, int, bool]]], execution_offset: int):
+    def __init__(self, uuid: uuid.UUID, thread_uuid: uuid.UUID, name: str, arguments: List[Dict[str, Union[str, int, bool]]], execution_offset: int, pc: int):
         super().__init__(uuid)
         self._thread_uuid = thread_uuid
         self._name = name
         self._arguments = arguments
         self._execution_offset = execution_offset
+        self._pc = pc
 
     def _from_db(db_object: _db_models.Syscall) -> 'Syscall':
         arguments = []
@@ -355,6 +356,9 @@ class Syscall(BaseModel):
 
     def execution_offset(self) -> int:
         return self._execution_offset
+
+    def pc(self) -> int:
+        return self._pc
 
     def to_pb(self):
         pb_args = []
