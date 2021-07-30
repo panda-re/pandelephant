@@ -127,7 +127,7 @@ class PandaDatastore:
             s.commit()
             return _models.ThreadSlice._from_db(ts)
 
-    def new_syscall(self, thread: _models.Thread, name: str, retval: int, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int) -> _models.Syscall:
+    def new_syscall(self, thread: _models.Thread, name: str, retval: int, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int, pc: int) -> _models.Syscall:
         with SessionTransactionWrapper(self.session_maker()) as s:
             db_args = []
             for i in range(len(args)):
@@ -161,7 +161,7 @@ class PandaDatastore:
                     raise Exception("Unrecognized Argument Type: " + str(a['type']))
                 
                 db_args.append(_db_models.SyscallArgument(name=a['name'], position=i, argument_type=db_type, value=db_val))
-            syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, retval=retval, arguments=db_args, execution_offset=execution_offset)
+            syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, retval=retval, arguments=db_args, execution_offset=execution_offset, pc=pc)
             s.add(syscall)
             s.commit()
             return _models.Syscall._from_db(syscall)

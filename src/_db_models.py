@@ -222,6 +222,9 @@ class Syscall(Base):
     # this is the thread that made the call
     thread_id = Column(GUID, ForeignKey('threads.thread_id'), nullable=False)
     thread = relationship('Thread', foreign_keys=[thread_id], uselist=False)
+    
+    # the program counter
+    pc = Column(BigInteger, nullable=False)
 
     # and this is when it happened
     execution_offset = Column(BigInteger, nullable=False)
