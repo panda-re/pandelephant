@@ -343,7 +343,7 @@ class Syscall(BaseModel):
 
             arguments.append(arg)
         
-        return Syscall(db_object.syscall_id, db_object.thread_id, db_object.name, arguments, db_object.execution_offset)
+        return Syscall(db_object.syscall_id, db_object.thread_id, db_object.name, arguments, db_object.execution_offset, db_object.pc)
     
     def thread_uuid(self) -> uuid.UUID:
         return self._thread_uuid
