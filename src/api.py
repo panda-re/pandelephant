@@ -1,7 +1,7 @@
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from sqlalchemy.pool import Pool
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple
 from . import _db_models
 from . import _models
 import uuid
@@ -20,6 +20,42 @@ class SessionTransactionWrapper:
                 else:
                         self.session.commit()
                 self.session.close()
+
+def determine_db_type_val(arg: Dict[str, Union[str, int, bool]]) -> Tuple[_db_models.ArgType, str]:
+    """
+    Given an argument dict with fields name, type, and value - identify the correct _db_models
+    type and translate it into that type to be stored.
+
+    Returns a tuple of the db_type and value that can be stored stored
+    """
+    db_type = None
+    db_val = str(arg['value']) # actual data that gets stored in DB - overloaded just for bytes
+
+    if arg['type'] == 'string':
+        db_type = _db_models.ArgType.STRING
+    elif arg['type'] == 'pointer':
+        db_type = _db_models.ArgType.POINTER
+    elif arg['type'] == 'unsigned64':
+        db_type = _db_models.ArgType.UNSIGNED_64
+    elif arg['type'] == 'signed64':
+        db_type = _db_models.ArgType.SIGNED_64
+    elif arg['type'] == 'unsigned32':
+        db_type = _db_models.ArgType.UNSIGNED_32
+    elif arg['type'] == 'signed32':
+        db_type = _db_models.ArgType.SIGNED_32
+    elif arg['type'] == 'unsigned16':
+        db_type = _db_models.ArgType.UNSIGNED_16
+    elif arg['type'] == 'signed16':
+        db_type = _db_models.ArgType.SIGNED_16
+    elif arg['type'] == 'bytes':
+        # Bytes is a bit of a pain - we can't store non-null terminated strings in
+        # the database, so we repr it and drop the leading 'b"' and the trailing '"'
+        db_type = _db_models.ArgType.BYTES
+        db_val = repr(arg['value'])[2:-1] # turn b"\x00foo\x00" into \x00foo\x00
+    else:
+        raise Exception("Unrecognized Argument Type: " + str(arg['type']))
+
+    return db_type, db_val
 
 class PandaDatastore:
     def __init__(self, url:str, debug:bool = False, pool:Pool = None):
@@ -127,40 +163,31 @@ class PandaDatastore:
             s.commit()
             return _models.ThreadSlice._from_db(ts)
 
+    def new_syscall_collection(self, syscalls: List[Tuple[_models.Thread, str, int, List[Dict[str, Union[str, int, bool]]], int, int]]) -> None:
+        '''
+        Bulk insert a bunch of syscalls. Significantly faster than inserting one at a time in a loop, but doesn't return the db object
+        '''
+        syscalls_to_insert = []
+        for (thread, name, retval, args, execution_offset, pc) in syscalls:
+            db_args = []
+            for idx, arg in enumerate(args):
+                db_type, db_val = determine_db_type_val(arg)
+                db_args.append(_db_models.SyscallArgument(name=arg['name'], position=idx, argument_type=db_type, value=db_val))
+
+            syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, retval=retval, arguments=db_args, execution_offset=execution_offset, pc=pc)
+            syscalls_to_insert.append(syscall)
+
+        with SessionTransactionWrapper(self.session_maker()) as s:
+            #s.bulk_save_objects(syscalls_to_insert) # XXX: Wish we could use this, but then the inserts will (silently!) drop the arguments
+            s.add_all(syscalls_to_insert) # This is about 2-4x slower than bulk_save_bojects, but it actually does insert the args
+
     def new_syscall(self, thread: _models.Thread, name: str, retval: int, args: List[Dict[str, Union[str, int, bool]]], execution_offset: int, pc: int) -> _models.Syscall:
         with SessionTransactionWrapper(self.session_maker()) as s:
             db_args = []
-            for i in range(len(args)):
-                a = args[i]
-                db_type = None
-
-                db_val = str(a['value']) # actual data that gets stored in DB - overloaded just for bytes
-
-                if a['type'] == 'string':
-                    db_type = _db_models.ArgType.STRING
-                elif a['type'] == 'pointer':
-                    db_type = _db_models.ArgType.POINTER
-                elif a['type'] == 'unsigned64':
-                    db_type = _db_models.ArgType.UNSIGNED_64
-                elif a['type'] == 'signed64':
-                    db_type = _db_models.ArgType.SIGNED_64
-                elif a['type'] == 'unsigned32':
-                    db_type = _db_models.ArgType.UNSIGNED_32
-                elif a['type'] == 'signed32':
-                    db_type = _db_models.ArgType.SIGNED_32
-                elif a['type'] == 'unsigned16':
-                    db_type = _db_models.ArgType.UNSIGNED_16
-                elif a['type'] == 'signed16':
-                    db_type = _db_models.ArgType.SIGNED_16
-                elif a['type'] == 'bytes':
-                    # Bytes is a bit of a pain - we can't store non-null terminated strings in
-                    # the database, so we repr it and drop the leading 'b"' and the trailing '"'
-                    db_type = _db_models.ArgType.BYTES
-                    db_val = repr(a['value'])[2:-1] # turn b"\x00foo\x00" into \x00foo\x00
-                else:
-                    raise Exception("Unrecognized Argument Type: " + str(a['type']))
+            for idx, arg in enumerate(args):
+                db_type, db_val = determine_db_type_val(arg)
                 
-                db_args.append(_db_models.SyscallArgument(name=a['name'], position=i, argument_type=db_type, value=db_val))
+                db_args.append(_db_models.SyscallArgument(name=arg['name'], position=idx, argument_type=db_type, value=db_val))
             syscall = _db_models.Syscall(thread_id=thread.uuid(), name=name, retval=retval, arguments=db_args, execution_offset=execution_offset, pc=pc)
             s.add(syscall)
             s.commit()
