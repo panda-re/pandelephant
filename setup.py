@@ -13,7 +13,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/panda-re/pandelephant",
-    package_dir={'pandelephant': 'src'},
+    package_dir={'pandelephant': 'src/pandelephant'},
     packages = ['pandelephant'],
     python_requires='>=3.6',
     install_requires=['sqlalchemy'],
