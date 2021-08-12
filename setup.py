@@ -20,11 +20,16 @@ setuptools.setup(
     extras_require={
         'postgres': ["psycopg2-binary"]
     },
+    package_data={
+        'pandelephant': [
+            '_data/protos/pandelephant/models.proto',
+        ],
+    },
     options={
         'generate_py_protobufs': {
-            'source_dir':        'protos',
-            'output_dir':        'src',  # default '.'
-            'proto_files':       ['protos/models.proto'],
+            'source_dir':        'src/pandelephant/_data/protos',
+            'output_dir':        'src',
+            'proto_files':       ['pandelephant/models.proto'],
         },
     },
 )
