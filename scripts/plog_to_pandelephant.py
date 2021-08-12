@@ -52,17 +52,17 @@ CollectedSyscallArgument = collections.namedtuple('CollectedSyscallArgument', ['
 CollectedTaintFlow = collections.namedtuple('CollectedTaintFlow', ['IsStore', 'SourceCodePoint', 'SourceThread', 'SourceInstructionCount', 'SinkCodePoint', 'SinkThread', 'SinkInstructionCount'])
 
 def CollectThreadsAndProcesses(pandalog):
-    # Why don't we just gather these on the fly? 
+    # Why don't we just gather these on the fly?
     # Because there are multiple sources for this information
-    # and they have to be reconciled. 
+    # and they have to be reconciled.
     # It's oddly tricky to get a consistent view out of a replay
     # of the set of threads and processes and their names.
-    # One could check at every basic block (by invoking Osi) 
+    # One could check at every basic block (by invoking Osi)
     # but that would be very slow.  So we check at a few std
     # temporal points (syscall, every 100 bb, asid_info logging points)
     # and reconcile.
     # Better would be if we had callback on after-scheduler-changes-proc
-    #  s.t. we could obtain proc/thread. 
+    #  s.t. we could obtain proc/thread.
 
     # thread is (pid, ppid, tid, create_time)
     # process is (pid, ppid)
@@ -145,9 +145,9 @@ def AssociateThreadsAndProcesses(processes, threads, thread_names):
     return proc2threads, thread2proc
 
 def CollectProcessMemoryMappings(pandalog, processes):
-    # 2nd pass over plog 
-    # 
-    # This time to get mappings for processes 
+    # 2nd pass over plog
+    #
+    # This time to get mappings for processes
 
     CollectedBetterMappings = set()
     CollectedBetterMappingRanges = { proc: { } for proc in processes }
