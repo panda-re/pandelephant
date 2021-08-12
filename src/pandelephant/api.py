@@ -126,11 +126,11 @@ class PandaDatastore:
             s.commit()
             return _models.Process._from_db(p)
 
-    def new_thread(self, process: _models.Process, create_time: int, tid: int, names: List[str]) -> _models.Thread:
+    def new_thread(self, process: _models.Process, create_time: int, tid: int, names: List[Tuple[str, Tuple[int, int]]]) -> _models.Thread:
         with SessionTransactionWrapper(self.session_maker()) as s:
             db_names = []
-            for n in names:
-                db_names.append(_db_models.ThreadName(name=n))
+            for n, (first, last) in names:
+                db_names.append(_db_models.ThreadName(name=n, first_seen_execution_offset=first, last_seen_execution_offset=last))
             t = _db_models.Thread(process_id=process.uuid(), create_time=create_time, tid=tid, names=db_names)
             s.add(t)
             s.commit()

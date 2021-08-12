@@ -1,4 +1,4 @@
-from typing import Union, Dict, List, Optional, Set
+from typing import Union, Dict, List, Optional, Set, Tuple
 import uuid
 from datetime import datetime
 from . import models_pb2 as pb
@@ -128,7 +128,7 @@ class Process(BaseModel):
         return pb.Process(uuid=str(self.uuid()), execution_uuid=str(self.execution_uuid()), create_time=self.create_time(), pid=self.pid(), ppid=self.ppid(), thread_uuids=_set_of_uuid_to_list_of_string(self.thread_uuids()), mapping_uuids=_set_of_uuid_to_list_of_string(self.mapping_uuids()))
 
 class Thread(BaseModel):
-    def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, create_time: int, tid: int,  names: Set[str]):
+    def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, create_time: int, tid: int,  names: Dict[str, Tuple[int, int]]):
         super().__init__(uuid)
         self._process_uuid = process_uuid
         self._tid = tid
@@ -136,9 +136,10 @@ class Thread(BaseModel):
         self._names = names
     
     def _from_db(db_object: _db_models.Thread) -> 'Thread':
-        names = set([])
-        for n in db_object.names:
-            names.add(n.name)
+        names = {
+            n.name: (n.first_seen_execution_offset, n.last_seen_execution_offset)
+            for n in db_object.names
+        }
         return Thread(db_object.thread_id, db_object.process_id, db_object.tid, db_object.create_time, names)
 
     def process_uuid(self) -> uuid.UUID:
@@ -154,7 +155,10 @@ class Thread(BaseModel):
         return self._names
 
     def to_pb(self):
-        return pb.Thread(uuid=str(self.uuid()), process_uuid=str(self.process_uuid()), create_time=self.create_time(), names=list(self.names()))
+        return pb.Thread(uuid=str(self.uuid()), process_uuid=str(self.process_uuid()), create_time=self.create_time(), names=[
+            pb.ThreadName(name=k, first_seen_execution_offset=v[0], last_seen_execution_offset=v[1])
+            for k, v in self.names().items()
+        ])
         
 class Mapping(BaseModel):
     def __init__(self, uuid: uuid.UUID, process_uuid: uuid.UUID, name: str, path: str, base_uuid: uuid.UUID, size: int, first_seen_execution_offset: int, last_seen_execution_offset: int):

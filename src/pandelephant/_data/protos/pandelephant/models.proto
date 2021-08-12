@@ -27,12 +27,18 @@ message Process {
     repeated string mapping_uuids = 7;
 }
 
+message ThreadName {
+    string name = 1;
+    uint64 first_seen_execution_offset = 2;
+    uint64 last_seen_execution_offset = 3;
+}
+
 message Thread {
     string uuid = 1;
     string process_uuid = 2;
     uint64 create_time = 3;
     uint64 tid = 4;
-    repeated string names = 5;
+    repeated ThreadName names = 6;
 }
 
 message Mapping {

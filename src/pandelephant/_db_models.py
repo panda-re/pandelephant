@@ -91,6 +91,8 @@ class ThreadName(Base):
     thread_id = Column(GUID, ForeignKey('threads.thread_id'), nullable=False)
     name = Column(String)
     thread = relationship("Thread", back_populates="names")
+    first_seen_execution_offset = Column(BigInteger, nullable=False) 
+    last_seen_execution_offset = Column(BigInteger, nullable=False)
 
 class Thread(Base):
     __tablename__ = 'threads'

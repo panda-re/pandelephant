@@ -70,34 +70,43 @@ def CollectThreadsAndProcesses(pandalog):
     threads = set()
     thread_slices = set()
     thread_names = {}
-    def CollectFrom_asid_libraries(msg):
+    def track_name(thread, name, start_instr, end_instr):
+        if thread in thread_names.keys():
+            if name in thread_names[thread].keys():
+                FirstInstructionCount, LastInstructionCount = thread_names[thread][name]
+                if start_instr < FirstInstructionCount:
+                    FirstInstructionCount = start_instr
+                if end_instr > LastInstructionCount:
+                    LastInstructionCount = end_instr
+                thread_names[thread][name] = (FirstInstructionCount, LastInstructionCount)
+            else:
+                thread_names[thread][name] = (start_instr, end_instr)
+        else:
+            thread_names[thread] = {
+                name: (start_instr, end_instr)
+            }
+    def CollectFrom_asid_libraries(entry, msg):
         thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time)
         # there might be several names for a tid
-        if thread in thread_names.keys():
-            thread_names[thread].add(msg.proc_name)
-        else:
-            thread_names[thread] = set([msg.proc_name])
+        track_name(thread=thread, name=msg.proc_name, start_instr=entry.instr, end_instr=entry.instr)
         threads.add(thread)
         processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
-    def CollectFrom_asid_info(msg):
+    def CollectFrom_asid_info(entry, msg):
         for tid in msg.tids:
             thread = CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=tid, CreateTime=msg.create_time)
-            if thread in thread_names.keys():
-                for name in msg.names:
-                    thread_names[thread].add(name)
-            else:
-                thread_names[thread] = set(msg.names)
+            for name in msg.names:
+                track_name(thread=thread, name=name, start_instr=msg.start_instr, end_instr=msg.end_instr)
             threads.add(thread)
             thread_slices.add(CollectedThreadSlice(FirstInstructionCount=msg.start_instr, LastInstructionCount=msg.end_instr, Thread=thread))
         processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
-    def CollectFrom_taint_flow(msg):
+    def CollectFrom_taint_flow(entry, msg):
         source_thread = msg.source.cp.thread
         threads.add(CollectedThread(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid, ThreadId=source_thread.tid, CreateTime=source_thread.create_time))
         processes.add(CollectedProcess(ProcessId=source_thread.pid, ParentProcessId=source_thread.ppid))
         sink_thread = msg.sink.cp.thread
         threads.add(CollectedThread(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid, ThreadId=sink_thread.tid, CreateTime=sink_thread.create_time))
         processes.add(CollectedProcess(ProcessId=sink_thread.pid, ParentProcessId=sink_thread.ppid))
-    def CollectFrom_syscall(msg):
+    def CollectFrom_syscall(entry, msg):
         threads.add(CollectedThread(ProcessId=msg.pid, ParentProcessId=msg.ppid, ThreadId=msg.tid, CreateTime=msg.create_time))
         processes.add(CollectedProcess(ProcessId=msg.pid, ParentProcessId=msg.ppid))
 
@@ -116,7 +125,7 @@ def CollectThreadsAndProcesses(pandalog):
                 if hasfield(msg, k):
                     AttemptCounts[k] += 1
                     try:
-                        CollectFrom[k](getattr(msg, k))
+                        CollectFrom[k](msg, getattr(msg, k))
                     except:
                         FailCounts[k] += 1
                         pass
@@ -347,7 +356,7 @@ def ConvertProcessThreadsMappingsToDatabase(datastore, execution, processes, thr
         CollectedProcessToDatabaseProcess[p] = process
 
         for t in proc2threads[p]:
-            CollectedThreadToDatabaseThread[t] = datastore.new_thread(process, t.CreateTime, t.ThreadId, thread_names[t])
+            CollectedThreadToDatabaseThread[t] = datastore.new_thread(process, t.CreateTime, t.ThreadId, thread_names[t].items())
         
         for mapping, (FirstInstructionCount, LastInstructionCount) in CollectedBetterMappingRanges[p].items():
             CollectedMappingToDatabaseMapping[mapping] = datastore.new_mapping(process, mapping.Name, mapping.File, mapping.AddressSpaceId, mapping.BaseAddress, FirstInstructionCount, mapping.Size, FirstInstructionCount, LastInstructionCount)
