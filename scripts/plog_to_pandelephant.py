@@ -13,11 +13,15 @@ import pandelephant
 # but if it's unavailable, fallback to searching PYTHONPATH
 # which users should add panda/panda/scripts to
 try:
-#            from pandare.plog_reader import PLogReader
-    sys.path.append(os.environ['LEET_PANDA_SCRIPTS_DIR'])
     from plog_reader import PLogReader
 except ImportError:
-    import PLogReader
+    try:
+        from pandare.plog_reader import PLogReader
+    except ImportError:
+        import PLogReader
+    except ImportError:
+        print("Unable to locate PLogReader")
+        sys.exit(-1)
 
 """
 USAGE: plog_to_pandelephant.py db_url plog
