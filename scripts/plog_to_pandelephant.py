@@ -298,6 +298,11 @@ def CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges):
         if (sink_mapping is None) or (source_mapping is None):
             return
 
+        if not (source_mapping.Name in module_restrictions):
+            return
+        if not (sink_mapping.Name in module_restrictions):
+            return
+
         SourceCodePoint = CollectedCodePoint(Mapping=source_mapping, Offset=source_offset)
         SinkCodePoint = CollectedCodePoint(Mapping=sink_mapping, Offset=sink_offset)
         CollectedCodePoints.add(SourceCodePoint)
@@ -372,7 +377,7 @@ def CreateExecutionIfNeeded(datastore, exec_name):
         matching_execution = datastore.new_execution(exec_name)
     return matching_execution
 
-def plog_to_pe(pandalog,  db_url, exec_name):
+def plog_to_pe(pandalog,  db_url, exec_name, module_restrictions=None):
     start_time = time.time()
     ds = pandelephant.PandaDatastore(db_url)
 
