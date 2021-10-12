@@ -156,6 +156,31 @@ class PandaDatastore:
             s.commit()
             return _models.TaintFlow._from_db(taintflow)
 
+    def new_taintflow_collection(self, taintflows: List[Tuple], CollectedThreadToDatabaseThread: Dict[Tuple, _models.Thread], CollectedMappingToDatabaseMapping: Dict[Tuple, _models.Mapping]):
+        DedupedCodePoints = set()
+        for tf in taintflows:
+            DedupedCodePoints.add((tf.SourceCodePoint.Mapping, tf.SourceCodePoint.Offset))
+            DedupedCodePoints.add((tf.SinkCodePoint.Mapping, tf.SinkCodePoint.Offset))
+        DatabaseCodePoints = {
+            (deduped_mapping, deduped_offset): _db_models.CodePoint(mapping_id=CollectedMappingToDatabaseMapping[deduped_mapping].uuid(), offset=deduped_offset)
+            for deduped_mapping, deduped_offset in DedupedCodePoints
+        }
+        taintflows_to_add = [
+            _db_models.TaintFlow(
+                source_is_store=tf.IsStore,
+                source=DatabaseCodePoints[tf.SourceCodePoint.Mapping, tf.SourceCodePoint.Offset],
+                source_thread_id=CollectedThreadToDatabaseThread[tf.SourceThread].uuid(),
+                sink=DatabaseCodePoints[tf.SinkCodePoint.Mapping, tf.SinkCodePoint.Offset],
+                sink_thread_id=CollectedThreadToDatabaseThread[tf.SinkThread].uuid(),
+                source_execution_offset=tf.SourceInstructionCount,
+                sink_execution_offset=tf.SinkInstructionCount
+            )
+            for tf in taintflows
+        ]
+        with SessionTransactionWrapper(self.session_maker()) as s:
+            s.add_all(DatabaseCodePoints.values())
+            s.add_all(taintflows_to_add)
+
     def new_threadslice(self, thread: _models.Thread, start_execution_offset: int, end_execution_offset: int) -> _models.ThreadSlice:
         with SessionTransactionWrapper(self.session_maker()) as s:
             ts = _db_models.ThreadSlice(thread_id=thread.uuid(), start_execution_offset=start_execution_offset, end_execution_offset=end_execution_offset)

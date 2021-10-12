@@ -213,18 +213,10 @@ def ConvertTaintFlowsAndSyscallsToDatabase(datastore, CollectedSyscalls, Collect
             args.append({'type': a.Type, 'value': a.Value})
         CollectedSyscallToDatabaseSyscall[s] = datastore.add(CollectedThreadToDatabaseThread[s.Thread], s.Name, args, s.InstructionCount)
 
-
-    for tf in CollectedTaintFlows:
-        src_thread = CollectedThreadToDatabaseThread[tf.SourceThread]
-        src_mapping = CollectedMappingToDatabaseMapping[tf.SourceCodePoint.Mapping]
-
-        sink_thread = CollectedThreadToDatabaseThread[tf.SinkThread]
-        sink_mapping = CollectedMappingToDatabaseMapping[tf.SinkCodePoint.Mapping]
-
-        CollectedCodePointToDatabaseCodePoint[tf] = datastore.new_taintflow(tf.IsStore, src_thread, src_mapping, tf.SourceCodePoint.Offset, tf.SourceInstructionCount, sink_thread, sink_mapping, tf.SinkCodePoint.Offset, tf.SinkInstructionCount)
+    datastore.new_taintflow_collection(CollectedTaintFlows, CollectedThreadToDatabaseThread, CollectedMappingToDatabaseMapping)
 
 
-def CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges):
+def CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges, module_restrictions):
     CollectedCodePoints = set()
     CollectedSyscalls = set()
     CollectedTaintFlows = set()
@@ -418,7 +410,7 @@ def plog_to_pe(pandalog,  db_url, exec_name, module_restrictions=None):
 
     print('Third pass over plog (Gathering Taint Flows and Syscalls)...')
     t7 = time.time()
-    CollectedTaintFlows, CollectedSyscalls, CollectedCodePoints = CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges)
+    CollectedTaintFlows, CollectedSyscalls, CollectedCodePoints = CollectTaintFlowsAndSyscalls(pandalog, CollectedBetterMappingRanges, module_restrictions=module_restrictions)
     t8 = time.time()
     print('{:.2f} sec to collect Taint Flows and Syscalls...'.format(t8 - t7))
     print('Collected {} Taint Flows {} Syscalls {} Code Points'.format(len(CollectedTaintFlows), len(CollectedSyscalls), len(CollectedCodePoints)))
