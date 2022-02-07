@@ -47,7 +47,7 @@ class Execution(Base):
     __tablename__ = 'executions'
     execution_id = Column(GUID, primary_key=True, default=uuid.uuid4)
     type = Column(String(20))
-    name = Column(String, unique=True, nullable=False) # a short, user supplied name
+    name = Column(String, nullable=False) # a short, user supplied name
     description = Column(String) # a longer, human description of the execution
     processes = relationship("Process", back_populates="execution")
     
